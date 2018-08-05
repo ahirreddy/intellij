@@ -162,7 +162,8 @@ final class BlazeSyncTask implements Progressive {
 
           @Override
           public void onScopeEnd(TimedEvent event) {
-            Preconditions.checkState(isSyncThread.get());
+            // logger.info(isSyncThread.toString());
+            // Preconditions.checkState(isSyncThread.get());
             timedEvents.add(event);
           }
         };
