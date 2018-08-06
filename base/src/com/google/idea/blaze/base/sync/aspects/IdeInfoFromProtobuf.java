@@ -48,6 +48,7 @@ import com.google.idea.blaze.base.ideinfo.TsIdeInfo;
 import com.google.idea.blaze.base.model.primitives.ExecutionRootPath;
 import com.google.idea.blaze.base.model.primitives.Kind;
 import com.google.idea.blaze.base.model.primitives.Label;
+import com.google.idea.blaze.base.scope.scopes.IdeaLogScope;
 import com.google.idea.common.guava.GuavaHelper;
 import java.util.Collection;
 import java.util.List;
@@ -56,6 +57,8 @@ import javax.annotation.Nullable;
 
 /** Conversion functions from new aspect-style Bazel IDE info to ASWB internal classes. */
 public class IdeInfoFromProtobuf {
+
+  private static final IdeaLogScope logger = new IdeaLogScope();
 
   @Nullable
   public static TargetIdeInfo makeTargetIdeInfo(IntellijIdeInfo.TargetIdeInfo message) {
@@ -444,12 +447,14 @@ public class IdeInfoFromProtobuf {
 
   @Nullable
   static Kind getKind(IntellijIdeInfo.TargetIdeInfo message) {
+    logger.info("Kind: " + message.getKindString());
     Kind kind = Kind.fromString(message.getKindString());
     if (kind != null) {
       return kind;
     }
     if (message.hasJavaIdeInfo()) {
-      return Kind.GENERIC_JAVA_PROVIDER;
+      throw new RuntimeException("alskdjfd " + message.getKindString());
+      // return Kind.GENERIC_JAVA_PROVIDER;
     }
     return null;
   }

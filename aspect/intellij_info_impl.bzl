@@ -356,6 +356,7 @@ def get_java_provider(target):
     if hasattr(target, "java"):
         return target.java
     if hasattr(target, "scala"):
+        # TODO(ahirreddy): Maybe add JavaInfo
         return target.scala
     if hasattr(target, "kt") and hasattr(target.kt, "outputs"):
         return target.kt
@@ -369,6 +370,9 @@ def collect_java_info(target, ctx, semantics, ide_info, ide_info_file, output_gr
     """Updates Java-specific output groups, returns false if not a Java target."""
     java = get_java_provider(target)
     if not java or not hasattr(java, "outputs") or not java.outputs:
+        # TODO(ahirreddy): Missing //third_party/jackson:shaded_dependencies
+        # Add JavaInfo provider to jar_jar_links
+        # Also missing @bazel_tools//tools/jdk:toolchain_hostjdk8
         return False
 
     java_semantics = semantics.java if hasattr(semantics, "java") else None
@@ -382,6 +386,16 @@ def collect_java_info(target, ctx, semantics, ide_info, ide_info_file, output_gr
     output_jars = [jar for output in java.outputs.jars for jar in jars_from_output(output)]
     resolve_files = depset(output_jars)
     compile_files = depset(class_jars)
+
+
+    if "jsonutil" in str(target):
+        print("output jars", java.outputs.jars)
+        print("sources", sources)
+        print("jars", jars)
+        print("class_jars", class_jars)
+        print("output_jars", output_jars)
+        print("resolve_files", resolve_files)
+        print("compile_files", compile_files)
 
     gen_jars = []
     if (hasattr(java, "annotation_processing") and
@@ -438,6 +452,17 @@ def collect_java_info(target, ctx, semantics, ide_info, ide_info_file, output_gr
         main_class = getattr(ctx.rule.attr, "main_class", None),
         test_class = getattr(ctx.rule.attr, "test_class", None),
     )
+
+    if "jsonutil" in str(target):
+        print("=====================")
+        print("=====================")
+        print("=====================")
+        print("=====================")
+        print("=====================")
+        print("=====================")
+        print("=====================")
+        print("=====================")
+        print(target, java_info.to_json())
 
     ide_info["java_ide_info"] = java_info
     ide_info_files += depset([ide_info_file])
