@@ -387,16 +387,6 @@ def collect_java_info(target, ctx, semantics, ide_info, ide_info_file, output_gr
     resolve_files = depset(output_jars)
     compile_files = depset(class_jars)
 
-
-    if "jsonutil" in str(target):
-        print("output jars", java.outputs.jars)
-        print("sources", sources)
-        print("jars", jars)
-        print("class_jars", class_jars)
-        print("output_jars", output_jars)
-        print("resolve_files", resolve_files)
-        print("compile_files", compile_files)
-
     gen_jars = []
     if (hasattr(java, "annotation_processing") and
         java.annotation_processing and
@@ -452,17 +442,6 @@ def collect_java_info(target, ctx, semantics, ide_info, ide_info_file, output_gr
         main_class = getattr(ctx.rule.attr, "main_class", None),
         test_class = getattr(ctx.rule.attr, "test_class", None),
     )
-
-    if "jsonutil" in str(target):
-        print("=====================")
-        print("=====================")
-        print("=====================")
-        print("=====================")
-        print("=====================")
-        print("=====================")
-        print("=====================")
-        print("=====================")
-        print(target, java_info.to_json())
 
     ide_info["java_ide_info"] = java_info
     ide_info_files += depset([ide_info_file])
@@ -712,6 +691,7 @@ def intellij_info_aspect_impl(target, ctx, semantics):
         aspect_hash = hash(".".join(aspect_ids))
         file_name = file_name + "-" + str(aspect_hash)
     file_name = file_name + ".intellij-info.txt"
+    fail(file_name)
     ide_info_file = ctx.new_file(file_name)
 
     target_key = make_target_key(target.label, aspect_ids)
@@ -744,11 +724,20 @@ def intellij_info_aspect_impl(target, ctx, semantics):
 
     # Add to generic output group if it's not handled by a language-specific handler
     if not handled:
+        fail("test: " + str(target))
         update_set_in_dict(output_groups, "intellij-info-generic", depset([ide_info_file]))
 
     # Output the ide information file.
     info = struct_omit_none(**ide_info)
     ctx.file_action(ide_info_file, info.to_proto())
+    # if "//webapp:webapp-jetty9-hadoop1_2.12" in str(target):
+    #     print("ASDF: " + info.to_json())
+    # if "//webapp:webapp_java" in str(target):
+    #     print("ASDF: " + info.to_json())
+    # if "//maven/jetty9-hadoop1/org.jsoup/jsoup:jsoup" in str(target):
+    #     print("ASDF: " + info.to_json())
+
+    # print("ASDF: " + info.to_json())
 
     # Return providers.
     return struct_omit_none(
