@@ -39,7 +39,6 @@ import com.intellij.psi.PsiManager;
 import java.util.Collection;
 import java.util.List;
 import javax.annotation.Nullable;
-import com.google.idea.blaze.base.scope.scopes.IdeaLogScope;
 
 /**
  * Supports an 'attach sources' editor butter bar when navigating to .class files with associated
@@ -52,16 +51,12 @@ public class BlazeAttachSourceProvider implements AttachSourcesProvider {
   private static final BoolExperiment attachAutomatically =
       new BoolExperiment("blaze.attach.source.jars.automatically.2", true);
 
-  private static final IdeaLogScope logger = new IdeaLogScope();
-
   @Override
   public Collection<AttachSourcesAction> getActions(
       List<LibraryOrderEntry> orderEntries, final PsiFile psiFile) {
-    logger.info("12345 GET ACTIONS: " + orderEntries);
     Project project = psiFile.getProject();
     BlazeProjectData blazeProjectData =
         BlazeProjectDataManager.getInstance(project).getBlazeProjectData();
-    logger.info("12345 proj data: " + blazeProjectData);
     if (blazeProjectData == null) {
       return ImmutableList.of();
     }
@@ -91,8 +86,6 @@ public class BlazeAttachSourceProvider implements AttachSourcesProvider {
       }
       librariesToAttachSourceTo.add(blazeLibrary);
     }
-
-    logger.info("12345 libs to add source: " + librariesToAttachSourceTo);
 
     if (librariesToAttachSourceTo.isEmpty()) {
       return ImmutableList.of();

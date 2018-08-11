@@ -16,13 +16,11 @@
 package com.google.idea.blaze.base.ideinfo;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import com.google.idea.blaze.base.scope.scopes.IdeaLogScope;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableList;
 import java.io.Serializable;
 import javax.annotation.Nullable;
-import java.util.Arrays;
 
 /** Represents a jar artifact. */
 public class LibraryArtifact implements Serializable {
@@ -39,27 +37,16 @@ public class LibraryArtifact implements Serializable {
     if (interfaceJar == null && classJar == null) {
       throw new IllegalArgumentException("Interface and class jars cannot both be null.");
     }
-    // logger.error("Constructing Library Artifact", new Exception());
-    logger.info("ZZZ Constructing Library Artifact");
-    if (classJar != null) {
-      logger.info("ZZZ Class jar: " + classJar);
-    }
-    if (interfaceJar != null) {
-      logger.info("ZZZ Ijar: " + interfaceJar);
-    }
 
     this.interfaceJar = interfaceJar;
     this.classJar = classJar;
     this.sourceJars = checkNotNull(sourceJars);
-    logger.info("ZZZ SOURCES ==================SOURCES");
-    this.sourceJars.forEach(lib -> logger.info("ZZZ SOURCE PLEASE: " + lib));
-    logger.info("ZZZ SOURCES END ==================SOURCES END");
   }
 
   /**
    * Returns the best jar to add to IntelliJ.
    *
-   * <p>We prefer the interface jar if one exists, otherwise the class jar.
+   * <p>We prefer the class jar if one exists, otherwise the interface jar.
    */
   public ArtifactLocation jarForIntellijLibrary() {
     if (classJar != null) {
@@ -97,8 +84,6 @@ public class LibraryArtifact implements Serializable {
     return new Builder();
   }
 
-  private static final IdeaLogScope logger = new IdeaLogScope();
-
   /** Builder for library artifacts */
   public static class Builder {
     private ArtifactLocation interfaceJar;
@@ -116,7 +101,6 @@ public class LibraryArtifact implements Serializable {
     }
 
     public Builder addSourceJar(ArtifactLocation... artifactLocations) {
-      Arrays.stream(artifactLocations).forEach(lib -> logger.info("ADDD LIB: " + lib));
       this.sourceJars.add(artifactLocations);
       return this;
     }

@@ -19,7 +19,6 @@ import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.ImmutableSet;
-import com.google.idea.blaze.base.scope.scopes.IdeaLogScope;
 import java.util.Arrays;
 import java.util.Collection;
 import javax.annotation.Nullable;
@@ -112,6 +111,7 @@ public enum Kind {
   KOTLIN_STDLIB("kotlin_stdlib", LanguageClass.KOTLIN, RuleType.UNKNOWN),
 
   // any rule exposing java_common.provider which isn't specifically recognized
+  // TODO(ahirreddy): Is the presence of this generic provider causing issues?
   // GENERIC_JAVA_PROVIDER("generic_java", LanguageClass.JAVA, RuleType.UNKNOWN),
   ;
 
@@ -138,11 +138,8 @@ public enum Kind {
     return result.build();
   }
 
-  private static final IdeaLogScope logger = new IdeaLogScope();
-
   @Nullable
   public static Kind fromString(@Nullable String kindString) {
-    logger.info("KINDafaksldfj: " + kindString);
     return STRING_TO_KIND.get(kindString);
   }
 

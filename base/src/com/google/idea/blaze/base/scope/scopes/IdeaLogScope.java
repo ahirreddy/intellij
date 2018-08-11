@@ -69,8 +69,4 @@ public class IdeaLogScope implements BlazeScope {
   public static void info(String line) {
     logger.info(line);
   }
-
-  public static void error(String line, Throwable t) {
-    logger.error(line, t);
-  }
 }

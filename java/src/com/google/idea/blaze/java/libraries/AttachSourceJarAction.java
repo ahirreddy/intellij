@@ -26,11 +26,8 @@ import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.impl.libraries.ProjectLibraryTable;
 import com.intellij.openapi.roots.libraries.LibraryTable;
-import com.google.idea.blaze.base.scope.scopes.IdeaLogScope;
 
 class AttachSourceJarAction extends BlazeProjectAction {
-
-  private static final IdeaLogScope logger = new IdeaLogScope();
 
   @Override
   protected void updateForBlazeProject(Project project, AnActionEvent e) {
@@ -42,7 +39,6 @@ class AttachSourceJarAction extends BlazeProjectAction {
       return;
     }
     BlazeJarLibrary library = LibraryActionHelper.findBlazeLibraryForAction(project, e);
-    logger.info("ZZZZ AAAA: " + library);
     if (library == null || library.libraryArtifact.sourceJars.isEmpty()) {
       hideAction(presentation);
       return;

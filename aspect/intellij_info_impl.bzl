@@ -728,14 +728,6 @@ def intellij_info_aspect_impl(target, ctx, semantics):
     # Output the ide information file.
     info = struct_omit_none(**ide_info)
     ctx.file_action(ide_info_file, info.to_proto())
-    # if "//webapp:webapp-jetty9-hadoop1_2.12" in str(target):
-    #     print("ASDF: " + info.to_json())
-    # if "//webapp:webapp_java" in str(target):
-    #     print("ASDF: " + info.to_json())
-    # if "//maven/jetty9-hadoop1/org.jsoup/jsoup:jsoup" in str(target):
-    #     print("ASDF: " + info.to_json())
-
-    # print("ASDF: " + info.to_json())
 
     # Return providers.
     return struct_omit_none(
