@@ -32,8 +32,11 @@ import com.intellij.openapi.ui.Messages;
 import com.intellij.openapi.util.text.StringUtil;
 import com.intellij.pom.Navigatable;
 import javax.annotation.Nullable;
+import com.google.idea.blaze.base.scope.scopes.IdeaLogScope;
 
 class LibraryActionHelper {
+
+  private static final IdeaLogScope logger = new IdeaLogScope();
 
   @Nullable
   static BlazeJarLibrary findLibraryFromIntellijLibrary(
@@ -66,13 +69,19 @@ class LibraryActionHelper {
 
   @Nullable
   static Library findLibraryForAction(AnActionEvent e) {
+    logger.info("FIND LIBRARY 12345: " + e);
     Project project = e.getProject();
+    logger.info("PROJECT 12345: " + project);
     if (project != null) {
       NamedLibraryElementNode node = findLibraryNode(e.getDataContext());
+      logger.info("NODE 12345: " + node);
       if (node != null) {
         String libraryName = node.getName();
+        logger.info("LIB NAME 12345: " + libraryName);
         if (StringUtil.isNotEmpty(libraryName)) {
           LibraryTable libraryTable = ProjectLibraryTable.getInstance(project);
+          logger.info("LIB TABLE 12345: " + libraryTable);
+          logger.info("LIB OBJECT 12345: " + libraryTable.getLibraryByName(libraryName));
           return libraryTable.getLibraryByName(libraryName);
         }
       }

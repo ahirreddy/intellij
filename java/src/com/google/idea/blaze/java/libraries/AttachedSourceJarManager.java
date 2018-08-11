@@ -15,6 +15,7 @@
  */
 package com.google.idea.blaze.java.libraries;
 
+import com.google.idea.blaze.base.scope.scopes.IdeaLogScope;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
 import com.google.idea.blaze.base.model.LibraryKey;
@@ -45,8 +46,10 @@ public class AttachedSourceJarManager implements PersistentStateComponent<Elemen
 
   public void setHasSourceJarAttached(LibraryKey libraryKey, boolean hasSourceJar) {
     if (hasSourceJar) {
+      logger.info("ZZZ HAS ATTACHED: " + libraryKey);
       librariesWithSourceJarsAttached.add(libraryKey);
     } else {
+      logger.info("ZZZ NOT ATTACHED: " + libraryKey);
       librariesWithSourceJarsAttached.remove(libraryKey);
     }
   }
@@ -66,6 +69,8 @@ public class AttachedSourceJarManager implements PersistentStateComponent<Elemen
     return element;
   }
 
+  private static final IdeaLogScope logger = new IdeaLogScope();
+
   @Override
   public void loadState(Element state) {
     Set<LibraryKey> librariesWithSourceJars = Sets.newHashSet();
@@ -73,6 +78,7 @@ public class AttachedSourceJarManager implements PersistentStateComponent<Elemen
       LibraryKey libraryKey = LibraryKey.fromIntelliJLibraryName(libElement.getText());
       librariesWithSourceJars.add(libraryKey);
     }
+    librariesWithSourceJars.stream().forEach(lib -> logger.info("ZZZ ABC: " + lib));
     librariesWithSourceJarsAttached.clear();
     librariesWithSourceJarsAttached.addAll(librariesWithSourceJars);
   }
