@@ -27,8 +27,13 @@ import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
+import com.google.idea.blaze.base.scope.scopes.IdeaLogScope;
+
 /** Collects libraries from the sync data using all contributors. */
 public class BlazeLibraryCollector {
+
+  private static final IdeaLogScope logger = new IdeaLogScope();
+
   public static List<BlazeLibrary> getLibraries(
       ProjectViewSet projectViewSet, BlazeProjectData blazeProjectData) {
     // Use set to filter out duplicates.
@@ -38,9 +43,14 @@ public class BlazeLibraryCollector {
       LibrarySource librarySource = syncPlugin.getLibrarySource(projectViewSet, blazeProjectData);
       if (librarySource != null) {
         librarySources.add(librarySource);
+        logger.info("Added: " + librarySource);
+      } else {
+        logger.info("Not Added: " + librarySource);
       }
     }
     for (LibrarySource librarySource : librarySources) {
+      logger.info("Added Individual: " + librarySource);
+      logger.info("Sub Libraries: " +  librarySource.getLibraries());
       result.addAll(librarySource.getLibraries());
     }
     Predicate<BlazeLibrary> libraryFilter =

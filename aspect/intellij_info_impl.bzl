@@ -691,7 +691,6 @@ def intellij_info_aspect_impl(target, ctx, semantics):
         aspect_hash = hash(".".join(aspect_ids))
         file_name = file_name + "-" + str(aspect_hash)
     file_name = file_name + ".intellij-info.txt"
-    fail(file_name)
     ide_info_file = ctx.new_file(file_name)
 
     target_key = make_target_key(target.label, aspect_ids)
@@ -724,7 +723,6 @@ def intellij_info_aspect_impl(target, ctx, semantics):
 
     # Add to generic output group if it's not handled by a language-specific handler
     if not handled:
-        fail("test: " + str(target))
         update_set_in_dict(output_groups, "intellij-info-generic", depset([ide_info_file]))
 
     # Output the ide information file.
