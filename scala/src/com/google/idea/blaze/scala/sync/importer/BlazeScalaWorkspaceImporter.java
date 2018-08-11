@@ -30,14 +30,11 @@ import com.google.idea.blaze.base.targetmaps.TransitiveDependencyMap;
 import com.google.idea.blaze.java.sync.importer.JavaSourceFilter;
 import com.google.idea.blaze.java.sync.model.BlazeJarLibrary;
 import com.google.idea.blaze.scala.sync.model.BlazeScalaImportResult;
-import com.google.idea.blaze.base.scope.scopes.IdeaLogScope;
 import com.intellij.openapi.project.Project;
-import java.util.logging.Logger;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
-import java.util.logging.Level;
 
 /** Builds a BlazeWorkspace. */
 public final class BlazeScalaWorkspaceImporter {
@@ -45,8 +42,6 @@ public final class BlazeScalaWorkspaceImporter {
   private final WorkspaceRoot workspaceRoot;
   private final ProjectViewSet projectViewSet;
   private final TargetMap targetMap;
-
-  private static final IdeaLogScope logger = new IdeaLogScope();
 
   public BlazeScalaWorkspaceImporter(
       Project project,
@@ -64,13 +59,6 @@ public final class BlazeScalaWorkspaceImporter {
         new ProjectViewTargetImportFilter(project, workspaceRoot, projectViewSet);
 
     Collection<Kind> scalaKinds = Kind.allKindsForLanguage(LanguageClass.SCALA);
-
-    logger.info("Scala Kinds");
-    logger.info(scalaKinds.toString());
-
-    logger.info("Target Map");
-    logger.info(targetMap.map().toString());
-
     List<TargetKey> scalaSourceTargets =
         targetMap
             .targets()
@@ -81,47 +69,13 @@ public final class BlazeScalaWorkspaceImporter {
             .map(target -> target.key)
             .collect(Collectors.toList());
 
-    targetMap
-        .targets()
-        .stream()
-        .forEach(target -> {
-            logger.info("<<<<<<<<<<<<<<<<<<<<<<");
-            logger.info(target.toString());
-            logger.info(target.kind.toString());
-            if (target.javaIdeInfo != null) {
-                logger.info(target.javaIdeInfo.toString());
-            } else {
-                logger.info("Java IDE Info Is Null");
-            }
-            if (target.kindIsOneOf(scalaKinds)) {
-                logger.info("Scala Kind");
-            } else {
-                logger.info("Not Scala Kind");
-            }
-            if (importFilter.isSourceTarget(target)) {
-                logger.info("Is Source");
-            } else {
-                logger.info("Not source");
-            }
-            logger.info(">>>>>>>>>>>>>>>>>>>>>>");
-        });
-
     Map<LibraryKey, BlazeJarLibrary> libraries = Maps.newHashMap();
-
-    logger.info("============================================");
-
-    logger.info(scalaSourceTargets.toString());
 
     // Add every jar in the transitive closure of dependencies.
     // Direct dependencies of the working set will be double counted by BlazeJavaWorkspaceImporter,
     // but since they'll all merged into one set, we will end up with exactly one of each.
     for (TargetKey dependency :
         TransitiveDependencyMap.getTransitiveDependencies(scalaSourceTargets, targetMap)) {
-
-      logger.info("============================================");
-      // logger.info(scalaSourceTargets.toString());
-      logger.info(dependency.toString());
-
       TargetIdeInfo target = targetMap.get(dependency);
       if (target == null) {
         continue;

@@ -21,7 +21,6 @@ import com.google.idea.blaze.base.model.BlazeProjectData;
 import com.google.idea.blaze.base.sync.libraries.LibrarySource;
 import com.google.idea.blaze.scala.sync.model.BlazeScalaSyncData;
 import java.util.List;
-import com.google.idea.blaze.base.scope.scopes.IdeaLogScope;
 
 /** Provides libraries required by Scala rules. */
 public class BlazeScalaLibrarySource extends LibrarySource.Adapter {
@@ -31,16 +30,11 @@ public class BlazeScalaLibrarySource extends LibrarySource.Adapter {
     this.blazeProjectData = blazeProjectData;
   }
 
-  private static final IdeaLogScope logger = new IdeaLogScope();
-
   @Override
   public List<? extends BlazeLibrary> getLibraries() {
     BlazeScalaSyncData syncData = blazeProjectData.syncState.get(BlazeScalaSyncData.class);
     if (syncData == null) {
-      logger.info("adsfkjasdlfkj sync data is null");
       return ImmutableList.of();
-    } else {
-      logger.info("sync data: " + syncData.importResult.libraries.values().asList().toString());
     }
     return syncData.importResult.libraries.values().asList();
   }

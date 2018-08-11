@@ -235,6 +235,7 @@ public final class BlazeJavaWorkspaceImporter {
     }
 
     // Add all deps if this target is in the current working set
+    // DATABRICKS hack in order to get source jars of libraries recognized for scala libraries
     if (workingSet == null || workingSet.isTargetInWorkingSet(target) || true) {
       // Add self, so we pick up our own gen jars if in working set
       workspaceBuilder.directDeps.add(targetKey);
