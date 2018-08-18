@@ -77,7 +77,8 @@ public class BlazeScalaSyncPlugin implements BlazeSyncPlugin {
       // Convert the type of the SDK library to prevent the scala plugin from
       // showing the missing SDK notification.
       // TODO: use a canonical class in the SDK (e.g., scala.App) instead of the name?
-      if (library.getName() != null && library.getName().startsWith("scala-library")) {
+      if (library.getName() != null && library.getName().contains("scala-library")
+          && library.getName().contains("org.scala-lang")) {
         ExistingLibraryEditor editor = new ExistingLibraryEditor(library, null);
         editor.setType(ScalaLibraryType.instance());
         editor.commit();
