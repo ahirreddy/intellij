@@ -22,4 +22,10 @@
     <gotoDeclarationHandler
         implementation="com.google.idea.blaze.golang.resolve.BlazeGoGotoDeclarationHandler"/>
   </extensions>
+
+  <application-components>
+    <component>
+      <implementation-class>com.google.idea.blaze.golang.resolve.BlazeGoSymlinkPreresolver</implementation-class>
+    </component>
+  </application-components>
 </idea-plugin>

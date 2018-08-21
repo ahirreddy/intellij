@@ -14,16 +14,7 @@
   ~ limitations under the License.
   -->
 <idea-plugin>
-  <extensions defaultExtensionNs="com.goide">
-    <importResolver
-        implementation="com.google.idea.blaze.golang.resolve.BlazeGoImportResolver"
-        id="Blaze.GoImportResolver"/>
-    <packageFactory
-        implementation="com.google.idea.blaze.golang.resolve.BlazeGoPackageFactory"/>
-  </extensions>
-
-  <extensions defaultExtensionNs="com.intellij">
-    <documentationProvider implementation="com.google.idea.blaze.golang.resolve.BlazeGoImportResolver$GoPackageDocumentationProvider"/>
-    <additionalLibraryRootsProvider implementation="com.google.idea.blaze.golang.sync.BlazeGoAdditionalLibraryRootsProvider"/>
+  <extensions defaultExtensionNs="JavaScript">
+    <elementScopeProvider implementation="com.google.idea.blaze.ijwb.javascript.BlazeJavascriptResolveScopeProvider" order="first"/>
   </extensions>
 </idea-plugin>
