@@ -69,7 +69,8 @@ public class BlazeUserSettings implements PersistentStateComponent<BlazeUserSett
   @Deprecated private boolean showProblemsViewForRunAction = false;
   private boolean resyncAutomatically = false;
   private boolean syncStatusPopupShown = false;
-  private boolean expandSyncToWorkingSet = true;
+  // DATABRICKS CHANGE: Expand sync false -> true
+  private boolean expandSyncToWorkingSet = false;
   private boolean showPerformanceWarnings = false;
   private boolean collapseProjectView = true;
   private boolean formatBuildFilesOnSave = true;
