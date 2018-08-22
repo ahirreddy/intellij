@@ -15,6 +15,8 @@
  */
 package com.google.idea.blaze.base.settings;
 
+import java.io.File;
+
 import com.intellij.openapi.components.PersistentStateComponent;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.components.State;
@@ -23,8 +25,11 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.ide.plugins.IdeaPluginDescriptor;
+import com.intellij.ide.plugins.PluginManager;
 import com.intellij.ui.EditorNotifications;
 import com.intellij.util.xmlb.XmlSerializerUtil;
+import com.google.idea.blaze.base.sync.aspects.strategy.AspectStrategy;
 
 /** Stores blaze view settings. */
 @State(
@@ -213,7 +218,14 @@ public class BlazeUserSettings implements PersistentStateComponent<BlazeUserSett
   }
 
   public String getBazelBinaryPath() {
-    return StringUtil.defaultIfEmpty(bazelBinaryPath, DEFAULT_BAZEL_PATH).trim();
+    if (true) {
+      IdeaPluginDescriptor plugin =
+              PluginManager.getPlugin(
+                      PluginManager.getPluginByClassName(AspectStrategy.class.getName()));
+      return new File(plugin.getPath(), "aspect/bazel_cache").toString();
+    } else {
+      return StringUtil.defaultIfEmpty(bazelBinaryPath, DEFAULT_BAZEL_PATH).trim();
+    }
   }
 
   public void setBazelBinaryPath(String bazelBinaryPath) {
