@@ -59,7 +59,9 @@ public class BlazeUserSettings implements PersistentStateComponent<BlazeUserSett
 
   private static final String DEFAULT_BLAZE_PATH =
       SystemInfo.isMac ? "/usr/local/bin/blaze" : "/usr/bin/blaze";
-  private static final String DEFAULT_BAZEL_PATH = "bazel";
+  // DATABRICKS HACK: Fix Bazel Path
+  private static final String DEFAULT_BAZEL_PATH =
+      SystemInfo.isMac ? "/usr/local/bin/bazel" : "/usr/bin/bazel";
 
   private FocusBehavior showBlazeConsoleOnSync = FocusBehavior.ALWAYS;
   private FocusBehavior showBlazeProblemsViewOnSync = FocusBehavior.ALWAYS;
