@@ -15,6 +15,8 @@
  */
 package com.google.idea.blaze.base.settings;
 
+import java.io.File;
+
 import com.intellij.openapi.components.PersistentStateComponent;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.components.State;
@@ -23,8 +25,11 @@ import com.intellij.openapi.project.Project;
 import com.intellij.openapi.project.ProjectManager;
 import com.intellij.openapi.util.SystemInfo;
 import com.intellij.openapi.util.text.StringUtil;
+import com.intellij.ide.plugins.IdeaPluginDescriptor;
+import com.intellij.ide.plugins.PluginManager;
 import com.intellij.ui.EditorNotifications;
 import com.intellij.util.xmlb.XmlSerializerUtil;
+import com.google.idea.blaze.base.sync.aspects.strategy.AspectStrategy;
 
 /** Stores blaze view settings. */
 @State(
@@ -59,7 +64,9 @@ public class BlazeUserSettings implements PersistentStateComponent<BlazeUserSett
 
   private static final String DEFAULT_BLAZE_PATH =
       SystemInfo.isMac ? "/usr/local/bin/blaze" : "/usr/bin/blaze";
-  private static final String DEFAULT_BAZEL_PATH = "bazel";
+  // DATABRICKS HACK: Fix Bazel Path
+  private static final String DEFAULT_BAZEL_PATH =
+      SystemInfo.isMac ? "/usr/local/bin/bazel" : "/usr/bin/bazel";
 
   private FocusBehavior showBlazeConsoleOnSync = FocusBehavior.ALWAYS;
   private FocusBehavior showBlazeProblemsViewOnSync = FocusBehavior.ALWAYS;
@@ -69,7 +76,8 @@ public class BlazeUserSettings implements PersistentStateComponent<BlazeUserSett
   @Deprecated private boolean showProblemsViewForRunAction = false;
   private boolean resyncAutomatically = false;
   private boolean syncStatusPopupShown = false;
-  private boolean expandSyncToWorkingSet = true;
+  // DATABRICKS CHANGE: Expand sync false -> true
+  private boolean expandSyncToWorkingSet = false;
   private boolean showPerformanceWarnings = false;
   private boolean collapseProjectView = true;
   private boolean formatBuildFilesOnSave = true;
@@ -210,7 +218,14 @@ public class BlazeUserSettings implements PersistentStateComponent<BlazeUserSett
   }
 
   public String getBazelBinaryPath() {
-    return StringUtil.defaultIfEmpty(bazelBinaryPath, DEFAULT_BAZEL_PATH).trim();
+    if (true) {
+      IdeaPluginDescriptor plugin =
+              PluginManager.getPlugin(
+                      PluginManager.getPluginByClassName(AspectStrategy.class.getName()));
+      return new File(plugin.getPath(), "aspect/bazel_cache").toString();
+    } else {
+      return StringUtil.defaultIfEmpty(bazelBinaryPath, DEFAULT_BAZEL_PATH).trim();
+    }
   }
 
   public void setBazelBinaryPath(String bazelBinaryPath) {

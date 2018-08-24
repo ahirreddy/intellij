@@ -451,7 +451,8 @@ public class IdeInfoFromProtobuf {
       return kind;
     }
     if (message.hasJavaIdeInfo()) {
-      return Kind.GENERIC_JAVA_PROVIDER;
+      throw new RuntimeException("Generic Java Provider is disabled. Found: " + message.getKindString());
+      // return Kind.GENERIC_JAVA_PROVIDER;
     }
     return null;
   }

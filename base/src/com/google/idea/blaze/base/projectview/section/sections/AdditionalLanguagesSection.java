@@ -87,7 +87,14 @@ public class AdditionalLanguagesSection {
       additionalLanguages
           .stream()
           .sorted(Ordering.usingToString())
-          .map(lang -> "  # " + lang.getName())
+          .map(lang -> {
+            // DATABRICKS HACK - Enable Scala by default
+            if (lang.getName() == "scala") {
+              return "  " + lang.getName();
+            } else {
+              return "  # " + lang.getName();
+            }
+          })
           .forEach(string -> builder.add(TextBlock.of(string)));
       builder.add(TextBlock.newLine());
       return ProjectView.builder(topLevelProjectView).add(builder).build();

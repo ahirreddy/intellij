@@ -46,13 +46,14 @@ public class LibraryArtifact implements Serializable {
   /**
    * Returns the best jar to add to IntelliJ.
    *
-   * <p>We prefer the interface jar if one exists, otherwise the class jar.
+   * <p>We prefer the class jar if one exists, otherwise the interface jar.
    */
   public ArtifactLocation jarForIntellijLibrary() {
-    if (interfaceJar != null) {
+    if (classJar != null) {
+      return classJar;
+    } else {
       return interfaceJar;
     }
-    return classJar;
   }
 
   @Override

@@ -410,6 +410,7 @@ def get_java_provider(target):
     if hasattr(target, "java"):
         return target.java
     if hasattr(target, "scala"):
+        # TODO(ahirreddy): Maybe add JavaInfo
         return target.scala
     if hasattr(target, "kt") and hasattr(target.kt, "outputs"):
         return target.kt
@@ -423,6 +424,9 @@ def collect_java_info(target, ctx, semantics, ide_info, ide_info_file, output_gr
     """Updates Java-specific output groups, returns false if not a Java target."""
     java = get_java_provider(target)
     if not java or not hasattr(java, "outputs") or not java.outputs:
+        # TODO(ahirreddy): Missing //third_party/jackson:shaded_dependencies
+        # Add JavaInfo provider to jar_jar_links
+        # Also missing @bazel_tools//tools/jdk:toolchain_hostjdk8
         return False
 
     java_semantics = semantics.java if hasattr(semantics, "java") else None

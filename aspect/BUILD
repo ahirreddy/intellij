@@ -24,6 +24,7 @@ filegroup(
     srcs = [
         "WORKSPACE",
         "artifacts.bzl",
+        "bazel_cache",
         "fast_build_info.bzl",
         "intellij_info_bundled.bzl",
         "intellij_info_impl.bzl",

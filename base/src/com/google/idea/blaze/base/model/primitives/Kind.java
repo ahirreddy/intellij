@@ -74,6 +74,11 @@ public enum Kind {
   SCALA_BINARY("scala_binary", LanguageClass.SCALA, RuleType.BINARY),
   SCALA_IMPORT("scala_import", LanguageClass.SCALA, RuleType.UNKNOWN),
   SCALA_LIBRARY("scala_library", LanguageClass.SCALA, RuleType.LIBRARY),
+  GENERIC_SCALA_BINARY("generic_scala_binary", LanguageClass.SCALA, RuleType.BINARY),
+  GENERIC_SCALA_LIBRARY("generic_scala_library", LanguageClass.SCALA, RuleType.LIBRARY),
+  GENERIC_SCALA_WORKER("generic_scala_worker", LanguageClass.SCALA, RuleType.LIBRARY),
+  SCALA_ALIAS("_scala_alias", LanguageClass.SCALA, RuleType.LIBRARY),
+  GENERIC_SCALA_TEST("generic_scala_test", LanguageClass.SCALA, RuleType.TEST),
   SCALA_MACRO_LIBRARY("scala_macro_library", LanguageClass.SCALA, RuleType.LIBRARY),
   SCALA_TEST("scala_test", LanguageClass.SCALA, RuleType.TEST),
   SCALA_JUNIT_TEST("scala_junit_test", LanguageClass.SCALA, RuleType.TEST),
@@ -106,7 +111,8 @@ public enum Kind {
   KOTLIN_STDLIB("kotlin_stdlib", LanguageClass.KOTLIN, RuleType.UNKNOWN),
 
   // any rule exposing java_common.provider which isn't specifically recognized
-  GENERIC_JAVA_PROVIDER("generic_java", LanguageClass.JAVA, RuleType.UNKNOWN),
+  // TODO(ahirreddy): Is the presence of this generic provider causing issues?
+  // GENERIC_JAVA_PROVIDER("generic_java", LanguageClass.JAVA, RuleType.UNKNOWN),
   ;
 
   static final ImmutableMap<String, Kind> STRING_TO_KIND = makeStringToKindMap();

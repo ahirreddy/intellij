@@ -1,0 +1,6 @@
+#!/bin/bash
+set -e
+set -o pipefail
+
+export USE_BAZEL_CACHE=true
+exec bazel "$@"
