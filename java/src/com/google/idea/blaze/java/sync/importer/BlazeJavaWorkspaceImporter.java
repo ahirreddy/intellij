@@ -52,6 +52,7 @@ import com.google.idea.blaze.java.sync.source.SourceArtifact;
 import com.google.idea.blaze.java.sync.source.SourceDirectoryCalculator;
 import com.google.idea.blaze.java.sync.workingset.JavaWorkingSet;
 import com.intellij.openapi.project.Project;
+import com.intellij.openapi.diagnostic.Logger;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
@@ -75,6 +76,8 @@ public final class BlazeJavaWorkspaceImporter {
   private final WorkspaceLanguageSettings workspaceLanguageSettings;
   private final List<BlazeJavaSyncAugmenter> augmenters;
   private final ProjectViewSet projectViewSet;
+
+  private static final Logger logger = Logger.getInstance(BlazeJavaWorkspaceImporter.class);
 
   public BlazeJavaWorkspaceImporter(
       Project project,
@@ -195,6 +198,24 @@ public final class BlazeJavaWorkspaceImporter {
     for (TargetKey deps : workspaceBuilder.directDeps) {
       for (BlazeJarLibrary library : targetKeyToLibrary.get(deps)) {
         result.put(library.key, library);
+      }
+
+      // Fixing the problem that protobuf generated code cannot get indexed properly:
+      // When using direct dependency target ends with "jetty9-hadoop1_2.12", there is no library can be found
+      // in targetKeyToLibrary map. Although in targetKeyToLibrary map there are entries for all the aliases
+      // (like, "jetty9-hadoop1", etc). Here we are getting  the libraries using the alias, instead of the original
+      // target. But we need to get to the root cause of this.
+      if (deps.toString().contains("jetty9-hadoop1_2.12")) {
+        String depsNo2_12 = deps.toString().substring(0, deps.toString().length() - "_2.12".length());
+        logger.debug(String.format("Renaming dependency target %s to %s", deps.toString(), depsNo2_12));
+        for (TargetKey tk: targetKeyToLibrary.keys()) {
+          if (tk.toString().contains(depsNo2_12)) {
+            for (BlazeJarLibrary library : targetKeyToLibrary.get(tk)) {
+              logger.debug(String.format("Adding library %s from target %s", library.key.toString(), tk.toString()));
+              result.put(library.key, library);
+            }
+          }
+        }
       }
     }
 
