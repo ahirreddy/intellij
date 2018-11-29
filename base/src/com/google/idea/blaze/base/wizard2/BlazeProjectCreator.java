@@ -39,6 +39,9 @@ import com.intellij.openapi.wm.impl.IdeFrameImpl;
 import com.intellij.util.ui.UIUtil;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import javax.annotation.Nullable;
 import javax.swing.SwingUtilities;
 
@@ -95,6 +98,20 @@ class BlazeProjectCreator {
       }
 
       projectBuilder.commit(newProject, null, ModulesProvider.EMPTY_MODULES_PROVIDER);
+
+      // Generate the code style config folder in the project directory
+      File styleDir = new File(projectFilePath, ".idea/codeStyles");
+      styleDir.mkdirs();
+
+      // Symlink the relevant files that exist in Universe into this directory.
+      // This allows Universe side PRs to update style settings
+      File projectXml = new File(styleDir, "Project.xml");
+      Path styleLink = Paths.get("..", "..", "..", "bazel", "intellij-style.xml");
+      Files.createSymbolicLink(projectXml.toPath(), styleLink);
+
+      File configXml = new File(styleDir, "codeStyleConfig.xml");
+      Path configLink = Paths.get("..", "..", "..", "bazel", "codeStyleConfig.xml");
+      Files.createSymbolicLink(configXml.toPath(), configLink);
 
       StartupManager.getInstance(newProject)
           .registerPostStartupActivity(
