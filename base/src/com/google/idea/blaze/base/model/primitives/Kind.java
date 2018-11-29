@@ -205,7 +205,8 @@ public enum Kind implements ProtoWrapper<String> {
   public static Kind fromProto(IntellijIdeInfo.TargetIdeInfo proto) {
     Kind kind = Kind.fromString(proto.getKindString());
     if (kind == null && proto.hasJavaIdeInfo()) {
-      kind = Kind.GENERIC_JAVA_PROVIDER;
+      // kind = Kind.GENERIC_JAVA_PROVIDER;
+      throw new RuntimeException("No kind found for: " + proto.getKindString());
     }
     return kind;
   }
