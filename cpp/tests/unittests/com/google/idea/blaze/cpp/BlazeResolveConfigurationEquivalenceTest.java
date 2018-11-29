@@ -55,7 +55,6 @@ import com.google.idea.blaze.base.settings.BlazeImportSettings;
 import com.google.idea.blaze.base.settings.BlazeImportSettingsManager;
 import com.google.idea.common.experiments.ExperimentService;
 import com.google.idea.common.experiments.MockExperimentService;
-import com.google.idea.sdkcompat.cidr.CPPEnvironmentAdapter;
 import com.intellij.mock.MockPsiManager;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.progress.impl.ProgressManagerImpl;
@@ -91,7 +90,6 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
   protected void initTest(Container applicationServices, Container projectServices) {
     super.initTest(applicationServices, projectServices);
     applicationServices.register(BlazeExecutor.class, new MockBlazeExecutor());
-    CPPEnvironmentAdapter.registerForTest(applicationServices.getPicoContainer());
     applicationServices.register(ExperimentService.class, new MockExperimentService());
     applicationServices.register(
         CompilerVersionChecker.class, new MockCompilerVersionChecker("1234"));
@@ -113,10 +111,13 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
         .setImportSettings(
             new BlazeImportSettings("", "", "", "", buildSystemProvider.buildSystem()));
 
+    registerExtensionPoint(
+        BlazeCompilerFlagsProcessor.EP_NAME, BlazeCompilerFlagsProcessor.Provider.class);
+
     context.addOutputSink(IssueOutput.class, errorCollector);
 
     resolver = new BlazeConfigurationResolver(project);
-    resolverResult = BlazeConfigurationResolverResult.empty(project);
+    resolverResult = BlazeConfigurationResolverResult.empty();
   }
 
   @Test
@@ -132,21 +133,21 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
                     "//foo/bar:one",
                     Kind.CC_BINARY,
                     sources("foo/bar/one.cc"),
-                    defines(),
+                    copts(),
                     includes()))
             .addTarget(
                 createCcTarget(
                     "//foo/bar:two",
                     Kind.CC_BINARY,
                     sources("foo/bar/two.cc"),
-                    defines(),
+                    copts(),
                     includes()))
             .addTarget(
                 createCcTarget(
                     "//foo/bar:three",
                     Kind.CC_BINARY,
                     sources("foo/bar/three.cc"),
-                    defines(),
+                    copts(),
                     includes()))
             .build();
     List<BlazeResolveConfiguration> configurations = resolve(projectView, targetMap);
@@ -155,7 +156,7 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
     for (BlazeResolveConfiguration configuration : configurations) {
       assertThat(configuration.getProjectHeadersRootsInternal()).isEmpty();
       assertThat(getHeaders(configuration, OCLanguageKind.CPP)).isEmpty();
-      assertThat(configuration.getCompilerMacros()).isEqualTo(macros());
+      assertThat(configuration.getTargetCopts()).isEmpty();
     }
   }
 
@@ -172,29 +173,29 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
                     "//foo/bar:one",
                     Kind.CC_BINARY,
                     sources("foo/bar/one.cc"),
-                    defines("SAME=1"),
+                    copts("-DSAME=1"),
                     includes()))
             .addTarget(
                 createCcTarget(
                     "//foo/bar:two",
                     Kind.CC_BINARY,
                     sources("foo/bar/two.cc"),
-                    defines("SAME=1"),
+                    copts("-DSAME=1"),
                     includes()))
             .addTarget(
                 createCcTarget(
                     "//foo/bar:three",
                     Kind.CC_BINARY,
                     sources("foo/bar/three.cc"),
-                    defines("DIFFERENT=1"),
+                    copts("-DDIFFERENT=1"),
                     includes()))
             .build();
     List<BlazeResolveConfiguration> configurations = resolve(projectView, targetMap);
     assertThat(configurations).hasSize(2);
-    assertThat(get(configurations, "//foo/bar:one and 1 other target(s)").getCompilerMacros())
-        .isEqualTo(macros("SAME=1"));
-    assertThat(get(configurations, "//foo/bar:three").getCompilerMacros())
-        .isEqualTo(macros("DIFFERENT=1"));
+    assertThat(get(configurations, "//foo/bar:one and 1 other target(s)").getTargetCopts())
+        .isEqualTo(ImmutableList.of("-DSAME=1"));
+    assertThat(get(configurations, "//foo/bar:three").getTargetCopts())
+        .isEqualTo(ImmutableList.of("-DDIFFERENT=1"));
     for (BlazeResolveConfiguration configuration : configurations) {
       assertThat(configuration.getProjectHeadersRootsInternal()).isEmpty();
       assertThat(getHeaders(configuration, OCLanguageKind.CPP)).isEmpty();
@@ -214,21 +215,21 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
                     "//foo/bar:one",
                     Kind.CC_BINARY,
                     sources("foo/bar/one.cc"),
-                    defines(),
+                    copts(),
                     includes("foo/same")))
             .addTarget(
                 createCcTarget(
                     "//foo/bar:two",
                     Kind.CC_BINARY,
                     sources("foo/bar/two.cc"),
-                    defines(),
+                    copts(),
                     includes("foo/same")))
             .addTarget(
                 createCcTarget(
                     "//foo/bar:three",
                     Kind.CC_BINARY,
                     sources("foo/bar/three.cc"),
-                    defines(),
+                    copts(),
                     includes("foo/different")))
             .build();
     VirtualFile includeSame = createVirtualFile("/root/foo/same");
@@ -243,7 +244,7 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
         .containsExactly(header(includeDifferent));
     for (BlazeResolveConfiguration configuration : configurations) {
       assertThat(configuration.getProjectHeadersRootsInternal()).isEmpty();
-      assertThat(configuration.getCompilerMacros()).isEqualTo(macros());
+      assertThat(configuration.getTargetCopts()).isEmpty();
     }
   }
 
@@ -257,130 +258,116 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
                 "//foo/bar:a",
                 Kind.CC_BINARY,
                 sources("foo/bar/a.cc"),
-                defines("SAME=1"),
+                copts("-DSAME=1"),
                 includes()))
         .addTarget(
             createCcTarget(
                 "//foo/bar:b",
                 Kind.CC_BINARY,
                 sources("foo/bar/b.cc"),
-                defines("SAME=1"),
+                copts("-DSAME=1"),
                 includes()))
         .addTarget(
             createCcTarget(
                 "//foo/bar:c",
                 Kind.CC_BINARY,
                 sources("foo/bar/c.cc"),
-                defines("SAME=1"),
+                copts("-DSAME=1"),
                 includes()))
         .addTarget(
             createCcTarget(
                 "//foo/bar:d",
                 Kind.CC_BINARY,
                 sources("foo/bar/d.cc"),
-                defines("DIFFERENT=1"),
+                copts("-DDIFFERENT=1"),
                 includes()))
         .build();
   }
 
   // TODO(jvoung): This could be a separate Parameterized test.
-  private static final Map<List<String>, ReusedConfigurationExpectations>
+  private static final Map<List<String>, ImmutableList<String>>
+      // Nothing can really be reused, since we're changing the sources in each
+      // configuration, and configurations are tied to the sources now.
       permutationsAndExpectations =
-          ImmutableMap.<List<String>, ReusedConfigurationExpectations>builder()
-              .put(
-                  ImmutableList.of("a"),
-                  // Since we already had a config at 1 and one at 0, flipping any 1 to 0 will
-                  // always
-                  // result in reuse. The old configurations will get renamed.
-                  new ReusedConfigurationExpectations(
-                      ImmutableList.of(
-                          "//foo/bar:a and 1 other target(s)", "//foo/bar:b and 1 other target(s)"),
-                      ImmutableList.of()))
-              .put(
-                  ImmutableList.of("b"),
-                  new ReusedConfigurationExpectations(
-                      ImmutableList.of(
-                          "//foo/bar:a and 1 other target(s)", "//foo/bar:b and 1 other target(s)"),
-                      ImmutableList.of()))
-              .put(
-                  ImmutableList.of("c"),
-                  new ReusedConfigurationExpectations(
-                      ImmutableList.of(
-                          "//foo/bar:a and 1 other target(s)", "//foo/bar:c and 1 other target(s)"),
-                      ImmutableList.of()))
-              .put(
-                  ImmutableList.of("a", "b"),
-                  new ReusedConfigurationExpectations(
-                      ImmutableList.of("//foo/bar:a and 2 other target(s)", "//foo/bar:c"),
-                      ImmutableList.of()))
-              .put(
-                  ImmutableList.of("b", "c"),
-                  new ReusedConfigurationExpectations(
-                      ImmutableList.of("//foo/bar:a", "//foo/bar:b and 2 other target(s)"),
-                      ImmutableList.of()))
-              .put(
-                  ImmutableList.of("a", "c"),
-                  new ReusedConfigurationExpectations(
-                      ImmutableList.of("//foo/bar:a and 2 other target(s)", "//foo/bar:b"),
-                      ImmutableList.of()))
-              .put(
-                  ImmutableList.of("a", "b", "c"),
-                  new ReusedConfigurationExpectations(
-                      ImmutableList.of("//foo/bar:a and 3 other target(s)"), ImmutableList.of()))
-              .build();
+      ImmutableMap.<List<String>, ImmutableList<String>>builder()
+          .put(
+              ImmutableList.of("a"),
+              ImmutableList.of(
+                  "//foo/bar:a and 1 other target(s)", "//foo/bar:b and 1 other target(s)"))
+          .put(
+              ImmutableList.of("b"),
+              ImmutableList.of(
+                  "//foo/bar:a and 1 other target(s)", "//foo/bar:b and 1 other target(s)"))
+          .put(
+              ImmutableList.of("c"),
+              ImmutableList.of(
+                  "//foo/bar:a and 1 other target(s)", "//foo/bar:c and 1 other target(s)"))
+          .put(
+              ImmutableList.of("a", "b"),
+              ImmutableList.of("//foo/bar:a and 2 other target(s)", "//foo/bar:c"))
+          .put(
+              ImmutableList.of("b", "c"),
+              ImmutableList.of("//foo/bar:a", "//foo/bar:b and 2 other target(s)"))
+          .put(
+              ImmutableList.of("a", "c"),
+              ImmutableList.of("//foo/bar:a and 2 other target(s)", "//foo/bar:b"))
+          .put(
+              ImmutableList.of("a", "b", "c"),
+              ImmutableList.of("//foo/bar:a and 3 other target(s)"))
+          .build();
 
   @Test
   public void changeDefines_testIncrementalUpdate_0() {
-    Map.Entry<List<String>, ReusedConfigurationExpectations> testCase =
+    Map.Entry<List<String>, ImmutableList<String>> testCase =
         Iterables.get(permutationsAndExpectations.entrySet(), 0);
     do_changeDefines_testIncrementalUpdate(testCase.getKey(), testCase.getValue());
   }
 
   @Test
   public void changeDefines_testIncrementalUpdate_1() {
-    Map.Entry<List<String>, ReusedConfigurationExpectations> testCase =
+    Map.Entry<List<String>, ImmutableList<String>> testCase =
         Iterables.get(permutationsAndExpectations.entrySet(), 1);
     do_changeDefines_testIncrementalUpdate(testCase.getKey(), testCase.getValue());
   }
 
   @Test
   public void changeDefines_testIncrementalUpdate_2() {
-    Map.Entry<List<String>, ReusedConfigurationExpectations> testCase =
+    Map.Entry<List<String>, ImmutableList<String>> testCase =
         Iterables.get(permutationsAndExpectations.entrySet(), 2);
     do_changeDefines_testIncrementalUpdate(testCase.getKey(), testCase.getValue());
   }
 
   @Test
   public void changeDefines_testIncrementalUpdate_3() {
-    Map.Entry<List<String>, ReusedConfigurationExpectations> testCase =
+    Map.Entry<List<String>, ImmutableList<String>> testCase =
         Iterables.get(permutationsAndExpectations.entrySet(), 3);
     do_changeDefines_testIncrementalUpdate(testCase.getKey(), testCase.getValue());
   }
 
   @Test
   public void changeDefines_testIncrementalUpdate_4() {
-    Map.Entry<List<String>, ReusedConfigurationExpectations> testCase =
+    Map.Entry<List<String>, ImmutableList<String>> testCase =
         Iterables.get(permutationsAndExpectations.entrySet(), 4);
     do_changeDefines_testIncrementalUpdate(testCase.getKey(), testCase.getValue());
   }
 
   @Test
   public void changeDefines_testIncrementalUpdate_5() {
-    Map.Entry<List<String>, ReusedConfigurationExpectations> testCase =
+    Map.Entry<List<String>, ImmutableList<String>> testCase =
         Iterables.get(permutationsAndExpectations.entrySet(), 5);
     do_changeDefines_testIncrementalUpdate(testCase.getKey(), testCase.getValue());
   }
 
   @Test
   public void changeDefines_testIncrementalUpdate_6() {
-    Map.Entry<List<String>, ReusedConfigurationExpectations> testCase =
+    Map.Entry<List<String>, ImmutableList<String>> testCase =
         Iterables.get(permutationsAndExpectations.entrySet(), 6);
     do_changeDefines_testIncrementalUpdate(testCase.getKey(), testCase.getValue());
     assertThat(permutationsAndExpectations.size()).isEqualTo(7);
   }
 
   private void do_changeDefines_testIncrementalUpdate(
-      List<String> labelsToFlip, ReusedConfigurationExpectations expectation) {
+      List<String> labelsToFlip, ImmutableList<String> newConfigurationLabels) {
     ProjectView projectView = projectView(directories("foo/bar"), targets("//foo/bar:...:all"));
     List<BlazeResolveConfiguration> configurations =
         resolve(projectView, incrementalUpdateTestCaseInitialTargetMap());
@@ -396,7 +383,7 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
                 String.format("//foo/bar:%s", target),
                 Kind.CC_BINARY,
                 sources(String.format("foo/bar/%s.cc", target)),
-                defines("DIFFERENT=1"),
+                copts("-DDIFFERENT=1"),
                 includes()));
       } else {
         targetMapBuilder.addTarget(
@@ -404,7 +391,7 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
                 String.format("//foo/bar:%s", target),
                 Kind.CC_BINARY,
                 sources(String.format("foo/bar/%s.cc", target)),
-                defines("SAME=1"),
+                copts("-DSAME=1"),
                 includes()));
       }
     }
@@ -413,11 +400,14 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
             "//foo/bar:d",
             Kind.CC_BINARY,
             sources("foo/bar/d.cc"),
-            defines("DIFFERENT=1"),
+            copts("-DDIFFERENT=1"),
             includes()));
     List<BlazeResolveConfiguration> newConfigurations =
         resolve(projectView, targetMapBuilder.build());
-    assertReusedConfigs(configurations, newConfigurations, expectation);
+    assertThat(newConfigurations.size()).isEqualTo(newConfigurationLabels.size());
+    for (String label : newConfigurationLabels) {
+      assertThat(get(newConfigurations, label)).isNotNull();
+    }
   }
 
   @Test
@@ -437,28 +427,28 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
                     "//foo/bar:a",
                     Kind.CC_BINARY,
                     sources("foo/bar/a.cc"),
-                    defines("CHANGED=1"),
+                    copts("-DCHANGED=1"),
                     includes()))
             .addTarget(
                 createCcTarget(
                     "//foo/bar:b",
                     Kind.CC_BINARY,
                     sources("foo/bar/b.cc"),
-                    defines("CHANGED=1"),
+                    copts("-DCHANGED=1"),
                     includes()))
             .addTarget(
                 createCcTarget(
                     "//foo/bar:c",
                     Kind.CC_BINARY,
                     sources("foo/bar/c.cc"),
-                    defines("CHANGED=1"),
+                    copts("-DCHANGED=1"),
                     includes()))
             .addTarget(
                 createCcTarget(
                     "//foo/bar:d",
                     Kind.CC_BINARY,
                     sources("foo/bar/d.cc"),
-                    defines("DIFFERENT=1"),
+                    copts("-DDIFFERENT=1"),
                     includes()))
             .build();
     List<BlazeResolveConfiguration> newConfigurations = resolve(projectView, targetMap);
@@ -472,7 +462,7 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
   }
 
   @Test
-  public void changeDefinesMakeAllSame_testIncrementalUpdate() {
+  public void changeDefinesMakeAllSame_notReused() {
     ProjectView projectView = projectView(directories("foo/bar"), targets("//foo/bar:...:all"));
     TargetMap targetMap = incrementalUpdateTestCaseInitialTargetMap();
     List<BlazeResolveConfiguration> configurations = resolve(projectView, targetMap);
@@ -488,39 +478,35 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
                     "//foo/bar:a",
                     Kind.CC_BINARY,
                     sources("foo/bar/a.cc"),
-                    defines("SAME=1"),
+                    copts("-DSAME=1"),
                     includes()))
             .addTarget(
                 createCcTarget(
                     "//foo/bar:b",
                     Kind.CC_BINARY,
                     sources("foo/bar/b.cc"),
-                    defines("SAME=1"),
+                    copts("-DSAME=1"),
                     includes()))
             .addTarget(
                 createCcTarget(
                     "//foo/bar:c",
                     Kind.CC_BINARY,
                     sources("foo/bar/c.cc"),
-                    defines("SAME=1"),
+                    copts("-DSAME=1"),
                     includes()))
             .addTarget(
                 createCcTarget(
                     "//foo/bar:d",
                     Kind.CC_BINARY,
                     sources("foo/bar/d.cc"),
-                    defines("SAME=1"),
+                    copts("-DSAME=1"),
                     includes()))
             .build();
     List<BlazeResolveConfiguration> newConfigurations = resolve(projectView, targetMap);
     assertThat(newConfigurations).hasSize(1);
-    // What used to be "//foo/bar:a and 2 other target(s)" will be renamed to
-    // "//foo/bar:a and 3 other target(s)" and reused.
-    assertReusedConfigs(
-        configurations,
-        newConfigurations,
-        new ReusedConfigurationExpectations(
-            ImmutableList.of("//foo/bar:a and 3 other target(s)"), ImmutableList.of()));
+    // We can't actually reuse the configurations, since they they have a different
+    // set of sources covered, and CLion ties the sources to the configuration.
+    assertThat(get(newConfigurations, "//foo/bar:a and 3 other target(s)")).isNotNull();
   }
 
   private static List<ArtifactLocation> sources(String... paths) {
@@ -529,8 +515,8 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
         .collect(Collectors.toList());
   }
 
-  private static List<String> defines(String... defines) {
-    return Arrays.asList(defines);
+  private static List<String> copts(String... copts) {
+    return Arrays.asList(copts);
   }
 
   private static List<ExecutionRootPath> includes(String... paths) {
@@ -541,7 +527,7 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
       String label,
       Kind kind,
       List<ArtifactLocation> sources,
-      List<String> defines,
+      List<String> copts,
       List<ExecutionRootPath> includes) {
     TargetIdeInfo.Builder targetInfo =
         TargetIdeInfo.builder().setLabel(label).setKind(kind).addDependency("//:toolchain");
@@ -549,8 +535,8 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
     return targetInfo.setCInfo(
         CIdeInfo.builder()
             .addSources(sources)
-            .addLocalDefines(defines)
-            .addLocalIncludeDirectories(includes));
+            .addLocalCopts(copts)
+            .addTransitiveIncludeDirectories(includes));
   }
 
   private static TargetIdeInfo.Builder createCcToolchain() {
@@ -599,26 +585,19 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
   private static BlazeResolveConfiguration get(
       List<BlazeResolveConfiguration> configurations, String name) {
     List<BlazeResolveConfiguration> filteredConfigurations =
-        configurations
-            .stream()
+        configurations.stream()
             .filter(c -> c.getDisplayName(false).equals(name))
             .collect(Collectors.toList());
     assertWithMessage(
             String.format(
                 "%s contains %s",
-                configurations
-                    .stream()
+                configurations.stream()
                     .map(c -> c.getDisplayName(false))
                     .collect(Collectors.toList()),
                 name))
         .that(filteredConfigurations)
         .hasSize(1);
     return filteredConfigurations.get(0);
-  }
-
-  private BlazeCompilerMacros macros(String... defines) {
-    return new BlazeCompilerMacros(
-        project, null, null, ImmutableList.copyOf(defines), ImmutableMap.of());
   }
 
   private HeadersSearchRoot header(VirtualFile include) {
@@ -648,13 +627,17 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
       ReusedConfigurationExpectations expected) {
     for (String label : expected.reusedLabels) {
       assertWithMessage(String.format("Checking that %s is reused", label))
-          .that(get(newConfigurations, label))
-          .isSameAs(get(oldConfigurations, label));
+          .that(
+              get(newConfigurations, label)
+                  .isEquivalentConfigurations(get(oldConfigurations, label)))
+          .isTrue();
     }
     for (String label : expected.notReusedLabels) {
       assertWithMessage(String.format("Checking that %s is NOT reused", label))
-          .that(get(newConfigurations, label))
-          .isNotSameAs(get(oldConfigurations, label));
+          .that(
+              get(newConfigurations, label)
+                  .isEquivalentConfigurations(get(oldConfigurations, label)))
+          .isFalse();
     }
   }
 

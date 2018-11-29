@@ -73,7 +73,7 @@ public class BuildLangSyncPlugin implements BlazeSyncPlugin {
     LanguageSpecResult spec =
         getBuildLanguageSpec(project, workspaceRoot, projectViewSet, previousSyncState, context);
     if (spec != null) {
-      syncStateBuilder.put(LanguageSpecResult.class, spec);
+      syncStateBuilder.put(spec);
     }
   }
 
@@ -115,7 +115,7 @@ public class BuildLangSyncPlugin implements BlazeSyncPlugin {
           BlazeInfoRunner.getInstance()
               .runBlazeInfoGetBytes(
                   context,
-                  Blaze.getBuildSystemProvider(project).getSyncBinaryPath(),
+                  Blaze.getBuildSystemProvider(project).getSyncBinaryPath(project),
                   workspace,
                   BlazeFlags.blazeFlags(
                       project,

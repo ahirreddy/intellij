@@ -51,7 +51,7 @@ public class JavaSourceFolderProvider implements SourceFolderProvider {
       return ImmutableMap.of();
     }
     ImmutableMap.Builder<File, BlazeContentEntry> builder = ImmutableMap.builder();
-    for (BlazeContentEntry blazeContentEntry : syncData.importResult.contentEntries) {
+    for (BlazeContentEntry blazeContentEntry : syncData.getImportResult().contentEntries) {
       builder.put(blazeContentEntry.contentRoot, blazeContentEntry);
     }
     return builder.build();
@@ -129,7 +129,7 @@ public class JavaSourceFolderProvider implements SourceFolderProvider {
 
     // Create the source folder
     SourceFolder sourceFolder;
-    if (sourceDirectory.getIsResource()) {
+    if (sourceDirectory.isResource()) {
       sourceFolder =
           contentEntry.addSourceFolder(
               UrlUtil.pathToUrl(sourceDir.getPath()), JavaResourceRootType.RESOURCE);
@@ -140,7 +140,7 @@ public class JavaSourceFolderProvider implements SourceFolderProvider {
     JpsElement properties = sourceRoot.getProperties();
     if (properties instanceof JavaSourceRootProperties) {
       JavaSourceRootProperties rootProperties = (JavaSourceRootProperties) properties;
-      if (sourceDirectory.getIsGenerated()) {
+      if (sourceDirectory.isGenerated()) {
         rootProperties.setForGeneratedSources(true);
       }
     }

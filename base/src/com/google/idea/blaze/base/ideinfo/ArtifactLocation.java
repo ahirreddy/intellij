@@ -15,19 +15,21 @@
  */
 package com.google.idea.blaze.base.ideinfo;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Objects;
 import com.google.common.collect.ComparisonChain;
-import java.io.Serializable;
+import com.google.devtools.intellij.aspect.Common;
+import com.intellij.openapi.util.text.StringUtil;
 import java.nio.file.Paths;
+import java.util.List;
 
 /** Represents a blaze-produced artifact. */
-public final class ArtifactLocation implements Serializable, Comparable<ArtifactLocation> {
-  private static final long serialVersionUID = 5L;
-
+public final class ArtifactLocation
+    implements ProtoWrapper<Common.ArtifactLocation>, Comparable<ArtifactLocation> {
   private final String rootExecutionPathFragment;
-  public final String relativePath;
-  public final boolean isSource;
-  public final boolean isExternal;
+  private final String relativePath;
+  private final boolean isSource;
+  private final boolean isExternal;
 
   private ArtifactLocation(
       String rootExecutionPathFragment, String relativePath, boolean isSource, boolean isExternal) {
@@ -35,6 +37,52 @@ public final class ArtifactLocation implements Serializable, Comparable<Artifact
     this.relativePath = relativePath;
     this.isSource = isSource;
     this.isExternal = isExternal;
+  }
+
+  public static ArtifactLocation fromProto(Common.ArtifactLocation proto) {
+    proto = fixProto(proto);
+    return ProjectDataInterner.intern(
+        new ArtifactLocation(
+            proto.getRootExecutionPathFragment().intern(),
+            proto.getRelativePath(),
+            proto.getIsSource(),
+            proto.getIsExternal()));
+  }
+
+  private static Common.ArtifactLocation fixProto(Common.ArtifactLocation proto) {
+    if (!proto.getIsNewExternalVersion() && proto.getIsExternal()) {
+      String relativePath = proto.getRelativePath();
+      String rootExecutionPathFragment = proto.getRootExecutionPathFragment();
+      // fix up incorrect paths created with older aspect version
+      // Note: bazel always uses the '/' separator here, even on windows.
+      List<String> components = StringUtil.split(relativePath, "/");
+      if (components.size() > 2) {
+        relativePath = Joiner.on('/').join(components.subList(2, components.size()));
+        String prefix = components.get(0) + "/" + components.get(1);
+        rootExecutionPathFragment =
+            rootExecutionPathFragment.isEmpty() ? prefix : rootExecutionPathFragment + "/" + prefix;
+        return proto
+            .toBuilder()
+            .setRootExecutionPathFragment(rootExecutionPathFragment)
+            .setRelativePath(relativePath)
+            .build();
+      }
+    }
+    return proto;
+  }
+
+  @Override
+  public Common.ArtifactLocation toProto() {
+    return Common.ArtifactLocation.newBuilder()
+        .setRootExecutionPathFragment(rootExecutionPathFragment)
+        .setRelativePath(relativePath)
+        .setIsSource(isSource)
+        .setIsExternal(isExternal)
+        .build();
+  }
+
+  private String getRootExecutionPathFragment() {
+    return rootExecutionPathFragment;
   }
 
   /**
@@ -49,18 +97,22 @@ public final class ArtifactLocation implements Serializable, Comparable<Artifact
     return isSource;
   }
 
+  public boolean isExternal() {
+    return isExternal;
+  }
+
   public boolean isGenerated() {
-    return !isSource;
+    return !isSource();
   }
 
   /** Returns false for generated or external artifacts */
   public boolean isMainWorkspaceSourceArtifact() {
-    return isSource && !isExternal;
+    return isSource() && !isExternal();
   }
 
   /** For main-workspace source artifacts, this is simply the workspace-relative path. */
   public String getExecutionRootRelativePath() {
-    return Paths.get(rootExecutionPathFragment, relativePath).toString();
+    return Paths.get(getRootExecutionPathFragment(), getRelativePath()).toString();
   }
 
   public static Builder builder() {
@@ -96,10 +148,10 @@ public final class ArtifactLocation implements Serializable, Comparable<Artifact
 
     public static Builder copy(ArtifactLocation artifact) {
       return new Builder()
-          .setRelativePath(artifact.relativePath)
-          .setRootExecutionPathFragment(artifact.rootExecutionPathFragment)
-          .setIsSource(artifact.isSource)
-          .setIsExternal(artifact.isExternal);
+          .setRelativePath(artifact.getRelativePath())
+          .setRootExecutionPathFragment(artifact.getRootExecutionPathFragment())
+          .setIsSource(artifact.isSource())
+          .setIsExternal(artifact.isExternal());
     }
 
     public ArtifactLocation build() {
@@ -116,15 +168,16 @@ public final class ArtifactLocation implements Serializable, Comparable<Artifact
       return false;
     }
     ArtifactLocation that = (ArtifactLocation) o;
-    return Objects.equal(rootExecutionPathFragment, that.rootExecutionPathFragment)
-        && Objects.equal(relativePath, that.relativePath)
-        && Objects.equal(isSource, that.isSource)
-        && Objects.equal(isExternal, that.isExternal);
+    return Objects.equal(getRootExecutionPathFragment(), that.getRootExecutionPathFragment())
+        && Objects.equal(getRelativePath(), that.getRelativePath())
+        && Objects.equal(isSource(), that.isSource())
+        && Objects.equal(isExternal(), that.isExternal());
   }
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(rootExecutionPathFragment, relativePath, isSource, isExternal);
+    return Objects.hashCode(
+        getRootExecutionPathFragment(), getRelativePath(), isSource(), isExternal());
   }
 
   @Override
@@ -135,10 +188,10 @@ public final class ArtifactLocation implements Serializable, Comparable<Artifact
   @Override
   public int compareTo(ArtifactLocation o) {
     return ComparisonChain.start()
-        .compare(rootExecutionPathFragment, o.rootExecutionPathFragment)
-        .compare(relativePath, o.relativePath)
-        .compareFalseFirst(isSource, o.isSource)
-        .compareFalseFirst(isExternal, o.isExternal)
+        .compare(getRootExecutionPathFragment(), o.getRootExecutionPathFragment())
+        .compare(getRelativePath(), o.getRelativePath())
+        .compareFalseFirst(isSource(), o.isSource())
+        .compareFalseFirst(isExternal(), o.isExternal())
         .result();
   }
 }

@@ -1,3 +1,28 @@
+v2018.11.12
+===========
+* Resolve short-form references to external workspace targets
+* Changed serialization scheme for faster read/write and reduced disk usage.
+
+v2018.10.22
+===========
+* Bug fixes and internal cleanup.
+
+v2018.10.08
+===========
+* Support auto-syncing on proto file changes (Bazel Settings > Automatically re-sync when proto files change)
+
+v2018.09.24
+===========
+* Bug fixes and internal cleanup.
+
+v2018.09.10
+===========
+* Bug fixes and internal cleanup.
+
+v2018.08.20
+===========
+* Added a 'test_flags' project view section, used for all 'bazel test' invocations.
+
 v2018.08.06
 ===========
 * Bug fixes and internal cleanup.

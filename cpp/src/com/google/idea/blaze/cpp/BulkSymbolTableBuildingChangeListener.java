@@ -104,7 +104,7 @@ public class BulkSymbolTableBuildingChangeListener implements BulkFileListener {
     enabled =
         workspaceRoot != null
             && importRoots != null
-            && blazeProjectData.workspaceLanguageSettings.isLanguageActive(LanguageClass.C)
+            && blazeProjectData.getWorkspaceLanguageSettings().isLanguageActive(LanguageClass.C)
             && enableExperiment.getValue();
   }
 
@@ -194,7 +194,7 @@ public class BulkSymbolTableBuildingChangeListener implements BulkFileListener {
   }
 
   /** Sync listener to check if the workspace still supports C. */
-  public static class WorkspaceTypeSyncListener extends SyncListener.Adapter {
+  public static class WorkspaceTypeSyncListener implements SyncListener {
 
     @Override
     public void onSyncComplete(

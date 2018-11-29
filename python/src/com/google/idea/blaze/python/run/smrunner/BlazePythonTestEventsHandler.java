@@ -18,6 +18,7 @@ package com.google.idea.blaze.python.run.smrunner;
 import com.google.common.base.Joiner;
 import com.google.idea.blaze.base.command.BlazeFlags;
 import com.google.idea.blaze.base.model.primitives.Kind;
+import com.google.idea.blaze.base.model.primitives.Label;
 import com.google.idea.blaze.base.run.smrunner.BlazeTestEventsHandler;
 import com.intellij.execution.Location;
 import com.intellij.execution.testframework.sm.runner.SMTestLocator;
@@ -44,7 +45,12 @@ public class BlazePythonTestEventsHandler implements BlazeTestEventsHandler {
   }
 
   @Override
-  public String testDisplayName(@Nullable Kind kind, String rawName) {
+  public String testDisplayName(Label label, @Nullable Kind kind, String rawName) {
+    // Parameterized tests contain parentheses
+    if (rawName.contains("(")) {
+      return rawName;
+    }
+    // For non-parameterized, name will be fully-qualified classname. We only need last component.
     int lastDotIndex = rawName.lastIndexOf('.');
     return lastDotIndex != -1 ? rawName.substring(lastDotIndex + 1) : rawName;
   }
@@ -84,5 +90,4 @@ public class BlazePythonTestEventsHandler implements BlazeTestEventsHandler {
     String className = pyClass.getName();
     return methodName != null && className != null ? className + "." + methodName : null;
   }
-
 }

@@ -15,7 +15,7 @@
  */
 package com.google.idea.blaze.plugin.run;
 
-import static com.google.idea.common.guava.GuavaHelper.toImmutableSet;
+import static com.google.common.collect.ImmutableSet.toImmutableSet;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
@@ -23,6 +23,8 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Ordering;
 import com.google.idea.blaze.base.dependencies.TargetInfo;
+import com.google.idea.blaze.base.ideinfo.TargetIdeInfo;
+import com.google.idea.blaze.base.ideinfo.TargetKey;
 import com.google.idea.blaze.base.model.BlazeProjectData;
 import com.google.idea.blaze.base.model.primitives.Label;
 import com.google.idea.blaze.base.model.primitives.TargetExpression;
@@ -38,6 +40,7 @@ import com.google.idea.blaze.plugin.IntellijPluginRule;
 import com.intellij.execution.ExecutionException;
 import com.intellij.execution.Executor;
 import com.intellij.execution.configurations.ConfigurationFactory;
+import com.intellij.execution.configurations.GeneralCommandLine;
 import com.intellij.execution.configurations.JavaCommandLineState;
 import com.intellij.execution.configurations.JavaParameters;
 import com.intellij.execution.configurations.LocatableConfigurationBase;
@@ -69,6 +72,7 @@ import com.intellij.ui.ListCellRendererWrapper;
 import com.intellij.ui.RawCommandLineEditor;
 import com.intellij.ui.components.JBCheckBox;
 import com.intellij.util.PlatformUtils;
+import com.intellij.util.execution.ParametersListUtil;
 import java.awt.BorderLayout;
 import java.io.File;
 import java.io.IOException;
@@ -220,6 +224,23 @@ public class BlazeIntellijPluginConfiguration extends LocatableConfigurationBase
         return params;
       }
 
+      /** https://youtrack.jetbrains.com/issue/IDEA-201733 */
+      @Override
+      protected GeneralCommandLine createCommandLine() throws ExecutionException {
+        GeneralCommandLine commandLine = super.createCommandLine();
+        for (String jreName : new String[] {"jre64", "jre"}) {
+          File bundledJre = new File(ideaJdk.getHomePath(), jreName);
+          if (bundledJre.isDirectory()) {
+            File bundledJava = new File(bundledJre, "bin/java");
+            if (bundledJava.canExecute()) {
+              commandLine.setExePath(bundledJava.getAbsolutePath());
+              break;
+            }
+          }
+        }
+        return commandLine;
+      }
+
       @Override
       protected OSProcessHandler startProcess() throws ExecutionException {
         deployer.blockUntilDeployComplete();
@@ -236,16 +257,11 @@ public class BlazeIntellijPluginConfiguration extends LocatableConfigurationBase
     };
   }
 
-  private static void fillParameterList(ParametersList list, @Nullable String value) {
-    if (value == null) {
+  private static void fillParameterList(ParametersList list, @Nullable String parameters) {
+    if (parameters == null) {
       return;
     }
-
-    for (String parameter : value.split(" ")) {
-      if (parameter != null && parameter.length() > 0) {
-        list.add(parameter);
-      }
-    }
+    list.addAll(ParametersListUtil.parse(parameters, /* keepQuotes */ false));
   }
 
   @Override
@@ -357,12 +373,10 @@ public class BlazeIntellijPluginConfiguration extends LocatableConfigurationBase
     if (projectData == null) {
       return ImmutableSet.of();
     }
-    return projectData
-        .targetMap
-        .targets()
-        .stream()
+    return projectData.getTargetMap().targets().stream()
         .filter(IntellijPluginRule::isPluginTarget)
-        .map(t -> t.key.label)
+        .map(TargetIdeInfo::getKey)
+        .map(TargetKey::getLabel)
         .collect(toImmutableSet());
   }
 

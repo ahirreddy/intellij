@@ -12,13 +12,30 @@ java_library(
         "//common/concurrency",
         "//common/experiments",
         "//common/formatter",
-        "//common/guava",
         "//common/transactions",
         "//intellij_platform_sdk:jsr305",
         "//intellij_platform_sdk:plugin_api",
         "//proto:proto_deps",
         "//sdkcompat",
         "//third_party/auto_value",
+        "@error_prone_annotations//jar",
+    ],
+)
+
+java_library(
+    name = "proto_wrapper",
+    srcs = [
+        "src/com/google/idea/blaze/base/ideinfo/ProjectDataInterner.java",
+        "src/com/google/idea/blaze/base/ideinfo/ProtoWrapper.java",
+    ],
+    neverlink = 1,
+    visibility = ["//visibility:private"],
+    deps = [
+        ":base",
+        "//common/experiments",
+        "//intellij_platform_sdk:jsr305",
+        "//intellij_platform_sdk:plugin_api",
+        "//proto:proto_deps",
     ],
 )
 
@@ -40,8 +57,10 @@ java_library(
     ],
     neverlink = 1,
     deps = [
+        ":proto_wrapper",
         "//intellij_platform_sdk:jsr305",
         "//intellij_platform_sdk:plugin_api",
+        "//proto:proto_deps",
     ],
 )
 
@@ -59,8 +78,10 @@ java_library(
     ],
     neverlink = 1,
     deps = [
+        ":proto_wrapper",
         "//intellij_platform_sdk:jsr305",
         "//intellij_platform_sdk:plugin_api",
+        "//proto:proto_deps",
     ],
 )
 
@@ -79,8 +100,11 @@ java_library(
 
 # neverlink library exposed so other plugins can optionally depend on it
 java_library(
-    name = "event_logger_api",
-    srcs = ["src/com/google/idea/blaze/base/logging/EventLogger.java"],
+    name = "logging_api",
+    srcs = [
+        "src/com/google/idea/blaze/base/logging/EventLogger.java",
+        "src/com/google/idea/blaze/base/logging/LoggedSettingsProvider.java",
+    ],
     neverlink = 1,
     deps = [
         "//intellij_platform_sdk:jsr305",
@@ -102,6 +126,7 @@ java_library(
     neverlink = 1,
     deps = [
         ":label_api",
+        ":proto_wrapper",
         "//intellij_platform_sdk:jsr305",
         "//intellij_platform_sdk:plugin_api",
     ],
@@ -180,7 +205,6 @@ intellij_unit_test_suite(
         ":unit_test_utils",
         "//common/experiments",
         "//common/experiments:unit_test_utils",
-        "//common/guava",
         "//intellij_platform_sdk:jsr305",
         "//intellij_platform_sdk:plugin_api_for_tests",
         "//proto:proto_deps",
@@ -203,6 +227,7 @@ intellij_integration_test_suite(
         "//intellij_platform_sdk:jsr305",
         "//intellij_platform_sdk:plugin_api_for_tests",
         "//proto:proto_deps",
+        "//sdkcompat",
         "@junit//jar",
     ],
 )

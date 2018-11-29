@@ -16,32 +16,29 @@
 package com.google.idea.blaze.base.ideinfo;
 
 import com.google.common.collect.ImmutableList;
+import com.google.devtools.intellij.ideinfo.IntellijIdeInfo;
 import com.google.idea.blaze.base.model.primitives.ExecutionRootPath;
-import java.io.Serializable;
+import java.util.Objects;
 
-/** Sister class to {@link JavaIdeInfo} */
-public class CIdeInfo implements Serializable {
-  private static final long serialVersionUID = 8L;
+/** Ide info specific to cc rules. */
+public final class CIdeInfo implements ProtoWrapper<IntellijIdeInfo.CIdeInfo> {
+  private final ImmutableList<ArtifactLocation> sources;
+  private final ImmutableList<ArtifactLocation> headers;
+  private final ImmutableList<ArtifactLocation> textualHeaders;
 
-  public final ImmutableList<ArtifactLocation> sources;
-  public final ImmutableList<ArtifactLocation> headers;
-  public final ImmutableList<ArtifactLocation> textualHeaders;
-
-  public final ImmutableList<String> localDefines;
-  public final ImmutableList<ExecutionRootPath> localIncludeDirectories;
+  private final ImmutableList<String> localCopts;
   // From the cpp compilation context provider.
   // These should all be for the entire transitive closure.
-  public final ImmutableList<ExecutionRootPath> transitiveIncludeDirectories;
-  public final ImmutableList<ExecutionRootPath> transitiveQuoteIncludeDirectories;
-  public final ImmutableList<String> transitiveDefines;
-  public final ImmutableList<ExecutionRootPath> transitiveSystemIncludeDirectories;
+  private final ImmutableList<ExecutionRootPath> transitiveIncludeDirectories;
+  private final ImmutableList<ExecutionRootPath> transitiveQuoteIncludeDirectories;
+  private final ImmutableList<String> transitiveDefines;
+  private final ImmutableList<ExecutionRootPath> transitiveSystemIncludeDirectories;
 
-  public CIdeInfo(
+  private CIdeInfo(
       ImmutableList<ArtifactLocation> sources,
       ImmutableList<ArtifactLocation> headers,
       ImmutableList<ArtifactLocation> textualHeaders,
-      ImmutableList<String> localDefines,
-      ImmutableList<ExecutionRootPath> localIncludeDirectories,
+      ImmutableList<String> localCopts,
       ImmutableList<ExecutionRootPath> transitiveIncludeDirectories,
       ImmutableList<ExecutionRootPath> transitiveQuoteIncludeDirectories,
       ImmutableList<String> transitiveDefines,
@@ -49,12 +46,73 @@ public class CIdeInfo implements Serializable {
     this.sources = sources;
     this.headers = headers;
     this.textualHeaders = textualHeaders;
-    this.localDefines = localDefines;
-    this.localIncludeDirectories = localIncludeDirectories;
+    this.localCopts = localCopts;
     this.transitiveIncludeDirectories = transitiveIncludeDirectories;
     this.transitiveQuoteIncludeDirectories = transitiveQuoteIncludeDirectories;
     this.transitiveDefines = transitiveDefines;
     this.transitiveSystemIncludeDirectories = transitiveSystemIncludeDirectories;
+  }
+
+  static CIdeInfo fromProto(IntellijIdeInfo.CIdeInfo proto) {
+    return new CIdeInfo(
+        ProtoWrapper.map(proto.getSourceList(), ArtifactLocation::fromProto),
+        ProtoWrapper.map(proto.getHeaderList(), ArtifactLocation::fromProto),
+        ProtoWrapper.map(proto.getTextualHeaderList(), ArtifactLocation::fromProto),
+        ProtoWrapper.internStrings(proto.getTargetCoptList()),
+        ProtoWrapper.map(proto.getTransitiveIncludeDirectoryList(), ExecutionRootPath::fromProto),
+        ProtoWrapper.map(
+            proto.getTransitiveQuoteIncludeDirectoryList(), ExecutionRootPath::fromProto),
+        ProtoWrapper.internStrings(proto.getTransitiveDefineList()),
+        ProtoWrapper.map(
+            proto.getTransitiveSystemIncludeDirectoryList(), ExecutionRootPath::fromProto));
+  }
+
+  @Override
+  public IntellijIdeInfo.CIdeInfo toProto() {
+    return IntellijIdeInfo.CIdeInfo.newBuilder()
+        .addAllSource(ProtoWrapper.mapToProtos(sources))
+        .addAllHeader(ProtoWrapper.mapToProtos(headers))
+        .addAllTextualHeader(ProtoWrapper.mapToProtos(textualHeaders))
+        .addAllTargetCopt(localCopts)
+        .addAllTransitiveIncludeDirectory(ProtoWrapper.mapToProtos(transitiveIncludeDirectories))
+        .addAllTransitiveQuoteIncludeDirectory(
+            ProtoWrapper.mapToProtos(transitiveQuoteIncludeDirectories))
+        .addAllTransitiveDefine(transitiveDefines)
+        .addAllTransitiveSystemIncludeDirectory(
+            ProtoWrapper.mapToProtos(transitiveSystemIncludeDirectories))
+        .build();
+  }
+
+  public ImmutableList<ArtifactLocation> getSources() {
+    return sources;
+  }
+
+  public ImmutableList<ArtifactLocation> getHeaders() {
+    return headers;
+  }
+
+  public ImmutableList<ArtifactLocation> getTextualHeaders() {
+    return textualHeaders;
+  }
+
+  public ImmutableList<String> getLocalCopts() {
+    return localCopts;
+  }
+
+  public ImmutableList<ExecutionRootPath> getTransitiveIncludeDirectories() {
+    return transitiveIncludeDirectories;
+  }
+
+  public ImmutableList<ExecutionRootPath> getTransitiveQuoteIncludeDirectories() {
+    return transitiveQuoteIncludeDirectories;
+  }
+
+  public ImmutableList<String> getTransitiveDefines() {
+    return transitiveDefines;
+  }
+
+  public ImmutableList<ExecutionRootPath> getTransitiveSystemIncludeDirectories() {
+    return transitiveSystemIncludeDirectories;
   }
 
   public static Builder builder() {
@@ -67,9 +125,7 @@ public class CIdeInfo implements Serializable {
     private final ImmutableList.Builder<ArtifactLocation> headers = ImmutableList.builder();
     private final ImmutableList.Builder<ArtifactLocation> textualHeaders = ImmutableList.builder();
 
-    private final ImmutableList.Builder<String> localDefines = ImmutableList.builder();
-    private final ImmutableList.Builder<ExecutionRootPath> localIncludeDirectories =
-        ImmutableList.builder();
+    private final ImmutableList.Builder<String> localCopts = ImmutableList.builder();
     private final ImmutableList.Builder<ExecutionRootPath> transitiveIncludeDirectories =
         ImmutableList.builder();
     private final ImmutableList.Builder<ExecutionRootPath> transitiveQuoteIncludeDirectories =
@@ -108,13 +164,8 @@ public class CIdeInfo implements Serializable {
       return this;
     }
 
-    public Builder addLocalDefines(Iterable<String> localDefines) {
-      this.localDefines.addAll(localDefines);
-      return this;
-    }
-
-    public Builder addLocalIncludeDirectories(Iterable<ExecutionRootPath> localIncludeDirectories) {
-      this.localIncludeDirectories.addAll(localIncludeDirectories);
+    public Builder addLocalCopts(Iterable<String> copts) {
+      this.localCopts.addAll(copts);
       return this;
     }
 
@@ -146,8 +197,7 @@ public class CIdeInfo implements Serializable {
           sources.build(),
           headers.build(),
           textualHeaders.build(),
-          localDefines.build(),
-          localIncludeDirectories.build(),
+          localCopts.build(),
           transitiveIncludeDirectories.build(),
           transitiveQuoteIncludeDirectories.build(),
           transitiveDefines.build(),
@@ -160,32 +210,63 @@ public class CIdeInfo implements Serializable {
     return "CIdeInfo{"
         + "\n"
         + "  sources="
-        + sources
+        + getSources()
         + "\n"
         + "  headers="
-        + headers
+        + getHeaders()
         + "\n"
         + "  textualHeaders="
-        + textualHeaders
+        + getTextualHeaders()
         + "\n"
-        + "  localDefines="
-        + localDefines
-        + "\n"
-        + "  localIncludeDirectories="
-        + localIncludeDirectories
+        + "  localCopts="
+        + getLocalCopts()
         + "\n"
         + "  transitiveIncludeDirectories="
-        + transitiveIncludeDirectories
+        + getTransitiveIncludeDirectories()
         + "\n"
         + "  transitiveQuoteIncludeDirectories="
-        + transitiveQuoteIncludeDirectories
+        + getTransitiveQuoteIncludeDirectories()
         + "\n"
         + "  transitiveDefines="
-        + transitiveDefines
+        + getTransitiveDefines()
         + "\n"
         + "  transitiveSystemIncludeDirectories="
-        + transitiveSystemIncludeDirectories
+        + getTransitiveSystemIncludeDirectories()
         + "\n"
         + '}';
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    CIdeInfo cIdeInfo = (CIdeInfo) o;
+    return Objects.equals(sources, cIdeInfo.sources)
+        && Objects.equals(headers, cIdeInfo.headers)
+        && Objects.equals(textualHeaders, cIdeInfo.textualHeaders)
+        && Objects.equals(localCopts, cIdeInfo.localCopts)
+        && Objects.equals(transitiveIncludeDirectories, cIdeInfo.transitiveIncludeDirectories)
+        && Objects.equals(
+            transitiveQuoteIncludeDirectories, cIdeInfo.transitiveQuoteIncludeDirectories)
+        && Objects.equals(transitiveDefines, cIdeInfo.transitiveDefines)
+        && Objects.equals(
+            transitiveSystemIncludeDirectories, cIdeInfo.transitiveSystemIncludeDirectories);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(
+        sources,
+        headers,
+        textualHeaders,
+        localCopts,
+        transitiveIncludeDirectories,
+        transitiveQuoteIncludeDirectories,
+        transitiveDefines,
+        transitiveSystemIncludeDirectories);
   }
 }

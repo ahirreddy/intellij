@@ -15,8 +15,9 @@
  */
 package com.google.idea.blaze.base.sync.aspects;
 
-import com.google.common.collect.ImmutableBiMap;
-import com.google.common.collect.ImmutableMap;
+import static com.google.common.truth.Truth.assertThat;
+
+import com.google.common.collect.ImmutableSet;
 import com.google.devtools.intellij.aspect.Common;
 import com.google.devtools.intellij.ideinfo.IntellijIdeInfo;
 import com.google.devtools.intellij.ideinfo.IntellijIdeInfo.AndroidIdeInfo;
@@ -25,14 +26,14 @@ import com.google.devtools.intellij.ideinfo.IntellijIdeInfo.JavaIdeInfo;
 import com.google.devtools.intellij.ideinfo.IntellijIdeInfo.LibraryArtifact;
 import com.google.devtools.intellij.ideinfo.IntellijIdeInfo.TargetKey;
 import com.google.idea.blaze.base.BlazeTestCase;
-import com.google.idea.blaze.base.TestUtils;
+import com.google.idea.blaze.base.ideinfo.AndroidResFolder;
+import com.google.idea.blaze.base.ideinfo.ArtifactLocation;
 import com.google.idea.blaze.base.ideinfo.TargetIdeInfo;
-import com.google.idea.blaze.base.ideinfo.TargetMap;
 import com.google.idea.blaze.base.io.FileOperationProvider;
-import com.google.idea.blaze.base.model.primitives.Label;
 import com.google.idea.common.experiments.ExperimentService;
 import com.google.idea.common.experiments.MockExperimentService;
-import java.io.File;
+import java.util.Collection;
+import java.util.Set;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -49,7 +50,13 @@ public class BlazeIdeInterfaceAspectsImplTest extends BlazeTestCase {
   }
 
   @Test
-  public void testTargetIdeInfoIsSerializable() {
+  public void testTargetIdeInfoMultipleResourceFiles() {
+    Common.ArtifactLocation localResFolder = artifactLocation("res");
+    Set<String> localResourceRelativePath = ImmutableSet.of();
+    Common.ArtifactLocation quantumResFolder =
+        artifactLocation("java/com/google/android/assets/quantum/res");
+    Set<String> quantumResRelativePath =
+        ImmutableSet.of("values/colors.xml", "drawable/quantum_ic_1k_plus_vd_theme_24.xml");
     IntellijIdeInfo.TargetIdeInfo ideProto =
         IntellijIdeInfo.TargetIdeInfo.newBuilder()
             .setKey(TargetKey.newBuilder().setLabel("//test:test").build())
@@ -58,7 +65,6 @@ public class BlazeIdeInterfaceAspectsImplTest extends BlazeTestCase {
                 Dependency.newBuilder()
                     .setTarget(TargetKey.newBuilder().setLabel("//test:dep"))
                     .build())
-            .addTags("tag")
             .setJavaIdeInfo(
                 JavaIdeInfo.newBuilder()
                     .addJars(
@@ -68,31 +74,37 @@ public class BlazeIdeInterfaceAspectsImplTest extends BlazeTestCase {
                     .addSources(artifactLocation("source.java")))
             .setAndroidIdeInfo(
                 AndroidIdeInfo.newBuilder()
-                    .addResources(artifactLocation("res"))
+                    .addResFolders(resFolderLocation(localResFolder, localResourceRelativePath))
+                    .addResFolders(resFolderLocation(quantumResFolder, quantumResRelativePath))
                     .setApk(artifactLocation("apk"))
                     .addDependencyApk(artifactLocation("apk"))
                     .setJavaPackage("package"))
             .build();
-
-    TargetIdeInfo target = IdeInfoFromProtobuf.makeTargetIdeInfo(ideProto);
-    TestUtils.assertIsSerializable(target);
+    TargetIdeInfo target = TargetIdeInfo.fromProto(ideProto);
+    Collection<AndroidResFolder> resources = target.getAndroidIdeInfo().getResFolders();
+    assertThat(resources)
+        .containsExactly(
+            resFolderLocation(artifactLocation(localResFolder), localResourceRelativePath),
+            resFolderLocation(artifactLocation(quantumResFolder), quantumResRelativePath));
   }
 
-  @Test
-  public void testBlazeStateIsSerializable() {
-    BlazeIdeInterfaceAspectsImpl.State state = new BlazeIdeInterfaceAspectsImpl.State();
-    state.fileToTargetMapKey =
-        ImmutableBiMap.of(
-            new File("fileName"),
-            TargetIdeInfo.builder().setLabel(Label.create("//test:test")).build().key);
-    state.fileState = ImmutableMap.of();
-    state.targetMap =
-        new TargetMap(ImmutableMap.of()); // Tested separately in testRuleIdeInfoIsSerializable
-
-    TestUtils.assertIsSerializable(state);
+  static ArtifactLocation artifactLocation(Common.ArtifactLocation artifactLocation) {
+    return ArtifactLocation.builder().setRelativePath(artifactLocation.getRelativePath()).build();
   }
 
   static Common.ArtifactLocation artifactLocation(String relativePath) {
     return Common.ArtifactLocation.newBuilder().setRelativePath(relativePath).build();
+  }
+
+  static AndroidResFolder resFolderLocation(ArtifactLocation root, Set<String> resources) {
+    return AndroidResFolder.builder().setRoot(root).addResources(resources).build();
+  }
+
+  static IntellijIdeInfo.ResFolderLocation resFolderLocation(
+      Common.ArtifactLocation root, Set<String> resources) {
+    return IntellijIdeInfo.ResFolderLocation.newBuilder()
+        .setRoot(root)
+        .addAllResources(resources)
+        .build();
   }
 }

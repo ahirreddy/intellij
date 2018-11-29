@@ -15,27 +15,30 @@
  */
 package com.google.idea.blaze.base.ideinfo;
 
+import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.devtools.intellij.ideinfo.IntellijIdeInfo;
 import com.google.idea.blaze.base.model.primitives.Label;
-import java.io.Serializable;
 import java.util.Collection;
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 /** Ide info specific to android rules. */
-public final class AndroidIdeInfo implements Serializable {
-  private static final long serialVersionUID = 5L;
+public final class AndroidIdeInfo implements ProtoWrapper<IntellijIdeInfo.AndroidIdeInfo> {
+  private final ImmutableList<AndroidResFolder> resources;
+  @Nullable private final ArtifactLocation manifest;
+  @Nullable private final LibraryArtifact idlJar;
+  @Nullable private final LibraryArtifact resourceJar;
+  private final boolean hasIdlSources;
+  @Nullable private final String resourceJavaPackage;
+  private final boolean generateResourceClass;
+  @Nullable private final Label legacyResources;
 
-  public final Collection<ArtifactLocation> resources;
-  @Nullable public final ArtifactLocation manifest;
-  @Nullable public final LibraryArtifact idlJar;
-  @Nullable public final LibraryArtifact resourceJar;
-  public final boolean hasIdlSources;
-  @Nullable public final String resourceJavaPackage;
-  public boolean generateResourceClass;
-  @Nullable public Label legacyResources;
-
-  public AndroidIdeInfo(
-      Collection<ArtifactLocation> resources,
+  private AndroidIdeInfo(
+      List<AndroidResFolder> resources,
       @Nullable String resourceJavaPackage,
       boolean generateResourceClass,
       @Nullable ArtifactLocation manifest,
@@ -43,7 +46,7 @@ public final class AndroidIdeInfo implements Serializable {
       @Nullable LibraryArtifact resourceJar,
       boolean hasIdlSources,
       @Nullable Label legacyResources) {
-    this.resources = resources;
+    this.resources = ImmutableList.copyOf(resources);
     this.resourceJavaPackage = resourceJavaPackage;
     this.generateResourceClass = generateResourceClass;
     this.manifest = manifest;
@@ -53,13 +56,86 @@ public final class AndroidIdeInfo implements Serializable {
     this.legacyResources = legacyResources;
   }
 
+  static AndroidIdeInfo fromProto(IntellijIdeInfo.AndroidIdeInfo proto) {
+    return new AndroidIdeInfo(
+        !proto.getResFoldersList().isEmpty()
+            ? ProtoWrapper.map(proto.getResFoldersList(), AndroidResFolder::fromProto)
+            : ProtoWrapper.map(proto.getResourcesList(), AndroidResFolder::fromProto),
+        Strings.emptyToNull(proto.getJavaPackage()),
+        proto.getGenerateResourceClass(),
+        proto.hasManifest() ? ArtifactLocation.fromProto(proto.getManifest()) : null,
+        proto.hasIdlJar() ? LibraryArtifact.fromProto(proto.getIdlJar()) : null,
+        proto.hasResourceJar() ? LibraryArtifact.fromProto(proto.getResourceJar()) : null,
+        proto.getHasIdlSources(),
+        !Strings.isNullOrEmpty(proto.getLegacyResources())
+            ? Label.create(proto.getLegacyResources())
+            : null);
+  }
+
+  @Override
+  public IntellijIdeInfo.AndroidIdeInfo toProto() {
+    IntellijIdeInfo.AndroidIdeInfo.Builder builder =
+        IntellijIdeInfo.AndroidIdeInfo.newBuilder()
+            .addAllResFolders(ProtoWrapper.mapToProtos(resources))
+            .setGenerateResourceClass(generateResourceClass)
+            .setHasIdlSources(hasIdlSources);
+    ProtoWrapper.setIfNotNull(builder::setJavaPackage, resourceJavaPackage);
+    ProtoWrapper.unwrapAndSetIfNotNull(builder::setManifest, manifest);
+    ProtoWrapper.unwrapAndSetIfNotNull(builder::setIdlJar, idlJar);
+    ProtoWrapper.unwrapAndSetIfNotNull(builder::setResourceJar, resourceJar);
+    ProtoWrapper.unwrapAndSetIfNotNull(builder::setLegacyResources, legacyResources);
+    return builder.build();
+  }
+
+  public List<AndroidResFolder> getResFolders() {
+    return resources;
+  }
+
+  // #api181
+  public Collection<ArtifactLocation> getResources() {
+    return resources.stream().map(AndroidResFolder::getRoot).collect(Collectors.toList());
+  }
+
+  @Nullable
+  public ArtifactLocation getManifest() {
+    return manifest;
+  }
+
+  @Nullable
+  public LibraryArtifact getIdlJar() {
+    return idlJar;
+  }
+
+  @Nullable
+  public LibraryArtifact getResourceJar() {
+    return resourceJar;
+  }
+
+  public boolean hasIdlSources() {
+    return hasIdlSources;
+  }
+
+  @Nullable
+  public String getResourceJavaPackage() {
+    return resourceJavaPackage;
+  }
+
+  public boolean generateResourceClass() {
+    return generateResourceClass;
+  }
+
+  @Nullable
+  public Label getLegacyResources() {
+    return legacyResources;
+  }
+
   public static Builder builder() {
     return new Builder();
   }
 
   /** Builder for android rule */
   public static class Builder {
-    private Collection<ArtifactLocation> resources = Lists.newArrayList();
+    private List<AndroidResFolder> resources = Lists.newArrayList();
     private ArtifactLocation manifest;
     private LibraryArtifact idlJar;
     private LibraryArtifact resourceJar;
@@ -74,7 +150,11 @@ public final class AndroidIdeInfo implements Serializable {
     }
 
     public Builder addResource(ArtifactLocation artifactLocation) {
-      this.resources.add(artifactLocation);
+      return addResource(AndroidResFolder.builder().setRoot(artifactLocation).build());
+    }
+
+    public Builder addResource(AndroidResFolder androidResFolder) {
+      this.resources.add(androidResFolder);
       return this;
     }
 
@@ -126,5 +206,37 @@ public final class AndroidIdeInfo implements Serializable {
           hasIdlSources,
           legacyResources);
     }
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    AndroidIdeInfo that = (AndroidIdeInfo) o;
+    return hasIdlSources == that.hasIdlSources
+        && generateResourceClass == that.generateResourceClass
+        && Objects.equals(resources, that.resources)
+        && Objects.equals(manifest, that.manifest)
+        && Objects.equals(idlJar, that.idlJar)
+        && Objects.equals(resourceJar, that.resourceJar)
+        && Objects.equals(resourceJavaPackage, that.resourceJavaPackage)
+        && Objects.equals(legacyResources, that.legacyResources);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(
+        resources,
+        manifest,
+        idlJar,
+        resourceJar,
+        hasIdlSources,
+        resourceJavaPackage,
+        generateResourceClass,
+        legacyResources);
   }
 }

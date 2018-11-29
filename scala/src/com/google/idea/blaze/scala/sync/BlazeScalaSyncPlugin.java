@@ -70,7 +70,7 @@ public class BlazeScalaSyncPlugin implements BlazeSyncPlugin {
       ModuleEditor moduleEditor,
       Module workspaceModule,
       ModifiableRootModel workspaceModifiableModel) {
-    if (!blazeProjectData.workspaceLanguageSettings.isLanguageActive(LanguageClass.SCALA)) {
+    if (!blazeProjectData.getWorkspaceLanguageSettings().isLanguageActive(LanguageClass.SCALA)) {
       return;
     }
     for (Library library : ProjectLibraryTable.getInstance(project).getLibraries()) {
@@ -115,15 +115,14 @@ public class BlazeScalaSyncPlugin implements BlazeSyncPlugin {
               childContext.push(new TimingScope("ScalaWorkspaceImporter", EventType.Other));
               return blazeScalaWorkspaceImporter.importWorkspace();
             });
-    BlazeScalaSyncData syncData = new BlazeScalaSyncData(importResult);
-    syncStateBuilder.put(BlazeScalaSyncData.class, syncData);
+    syncStateBuilder.put(new BlazeScalaSyncData(importResult));
   }
 
   @Nullable
   @Override
   public LibrarySource getLibrarySource(
       ProjectViewSet projectViewSet, BlazeProjectData blazeProjectData) {
-    if (!blazeProjectData.workspaceLanguageSettings.isLanguageActive(LanguageClass.SCALA)) {
+    if (!blazeProjectData.getWorkspaceLanguageSettings().isLanguageActive(LanguageClass.SCALA)) {
       return null;
     }
     return new BlazeScalaLibrarySource(blazeProjectData);

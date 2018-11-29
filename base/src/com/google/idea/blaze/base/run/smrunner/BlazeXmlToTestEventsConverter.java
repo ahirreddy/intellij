@@ -36,10 +36,10 @@ import com.google.idea.blaze.base.settings.Blaze;
 import com.google.idea.blaze.base.settings.BuildSystem;
 import com.google.idea.blaze.base.sync.data.BlazeProjectDataManager;
 import com.google.idea.common.experiments.BoolExperiment;
-import com.google.idea.sdkcompat.smrunner.OutputToGeneralTestEventsConverterAdapter;
 import com.intellij.execution.process.ProcessOutputTypes;
 import com.intellij.execution.testframework.TestConsoleProperties;
 import com.intellij.execution.testframework.sm.runner.GeneralTestEventsProcessor;
+import com.intellij.execution.testframework.sm.runner.OutputToGeneralTestEventsConverter;
 import com.intellij.execution.testframework.sm.runner.events.TestFailedEvent;
 import com.intellij.execution.testframework.sm.runner.events.TestFinishedEvent;
 import com.intellij.execution.testframework.sm.runner.events.TestIgnoredEvent;
@@ -61,7 +61,7 @@ import javax.annotation.Nullable;
 import jetbrains.buildServer.messages.serviceMessages.TestSuiteStarted;
 
 /** Converts blaze test runner xml logs to smRunner events. */
-public class BlazeXmlToTestEventsConverter extends OutputToGeneralTestEventsConverterAdapter {
+public class BlazeXmlToTestEventsConverter extends OutputToGeneralTestEventsConverter {
 
   private static final ErrorOrFailureOrSkipped NO_ERROR = new ErrorOrFailureOrSkipped();
   private static final BoolExperiment removeZeroRunTimeCheck =
@@ -82,7 +82,12 @@ public class BlazeXmlToTestEventsConverter extends OutputToGeneralTestEventsConv
   }
 
   @Override
-  public void processTestSuites() {
+  public void flushBufferOnProcessTermination(int exitCode) {
+    super.flushBufferOnProcessTermination(exitCode);
+    processAllTestResults();
+  }
+
+  private void processAllTestResults() {
     onStartTesting();
     getProcessor().onTestsReporterAttached();
 
@@ -91,30 +96,46 @@ public class BlazeXmlToTestEventsConverter extends OutputToGeneralTestEventsConv
       return;
     }
     try {
-      List<ListenableFuture<?>> futures = new ArrayList<>();
+      List<ListenableFuture<ParsedTargetResults>> futures = new ArrayList<>();
       for (Label label : testResults.perTargetResults.keySet()) {
         futures.add(
             FetchExecutor.EXECUTOR.submit(
-                () -> processTestSuites(label, testResults.perTargetResults.get(label))));
+                () -> parseTestXml(label, testResults.perTargetResults.get(label))));
       }
-      FuturesUtil.getIgnoringErrors(Futures.allAsList(futures));
+      List<ParsedTargetResults> parsedResults =
+          FuturesUtil.getIgnoringErrors(Futures.allAsList(futures));
+      if (parsedResults != null) {
+        parsedResults.forEach(this::processAllTestResults);
+      }
     } finally {
       testResultFinderStrategy.deleteTemporaryOutputXmlFiles();
     }
   }
 
-  /** Process all test XML files from a single test target. */
-  private void processTestSuites(Label label, Collection<BlazeTestResult> results) {
+  /** Parsed test output for a single target. */
+  private static class ParsedTargetResults {
+    private final Label label;
+    private final Collection<BlazeTestResult> results;
+    private final List<File> outputFiles;
+    private final List<TestSuite> targetSuites;
+
+    ParsedTargetResults(
+        Label label,
+        Collection<BlazeTestResult> results,
+        List<File> outputFiles,
+        List<TestSuite> targetSuites) {
+      this.label = label;
+      this.results = results;
+      this.outputFiles = outputFiles;
+      this.targetSuites = targetSuites;
+    }
+  }
+
+  /** Parse all test XML files from a single test target. */
+  private static ParsedTargetResults parseTestXml(
+      Label label, Collection<BlazeTestResult> results) {
     List<File> outputFiles = new ArrayList<>();
     results.forEach(result -> outputFiles.addAll(result.getOutputXmlFiles()));
-
-    if (noUsefulOutput(results, outputFiles)) {
-      Optional<TestStatus> status =
-          results.stream().map(BlazeTestResult::getTestStatus).findFirst();
-      status.ifPresent(testStatus -> reportTargetWithoutOutputFiles(label, testStatus));
-      return;
-    }
-
     List<TestSuite> targetSuites = new ArrayList<>();
     for (File file : outputFiles) {
       try (InputStream input = new FileInputStream(file)) {
@@ -124,12 +145,21 @@ public class BlazeXmlToTestEventsConverter extends OutputToGeneralTestEventsConv
         // recognize.
       }
     }
-    if (targetSuites.isEmpty()) {
+    return new ParsedTargetResults(label, results, outputFiles, targetSuites);
+  }
+
+  /** Process all test XML files from a single test target. */
+  private void processAllTestResults(ParsedTargetResults parsedResults) {
+    if (noUsefulOutput(parsedResults.results, parsedResults.outputFiles)) {
+      Optional<TestStatus> status =
+          parsedResults.results.stream().map(BlazeTestResult::getTestStatus).findFirst();
+      status.ifPresent(
+          testStatus -> reportTargetWithoutOutputFiles(parsedResults.label, testStatus));
       return;
     }
+
     Kind kind =
-        results
-            .stream()
+        parsedResults.results.stream()
             .map(BlazeTestResult::getTargetKind)
             .filter(Objects::nonNull)
             .findFirst()
@@ -137,8 +167,10 @@ public class BlazeXmlToTestEventsConverter extends OutputToGeneralTestEventsConv
     BlazeTestEventsHandler eventsHandler =
         BlazeTestEventsHandler.getHandlerForTargetKindOrFallback(kind);
     TestSuite suite =
-        targetSuites.size() == 1 ? targetSuites.get(0) : BlazeXmlSchema.mergeSuites(targetSuites);
-    processTestSuite(getProcessor(), eventsHandler, kind, suite);
+        parsedResults.targetSuites.size() == 1
+            ? parsedResults.targetSuites.get(0)
+            : BlazeXmlSchema.mergeSuites(parsedResults.targetSuites);
+    processTestSuite(getProcessor(), eventsHandler, parsedResults.label, kind, suite);
   }
 
   /** Return false if there's output XML which should be parsed. */
@@ -190,28 +222,29 @@ public class BlazeXmlToTestEventsConverter extends OutputToGeneralTestEventsConv
   private static void processTestSuite(
       GeneralTestEventsProcessor processor,
       BlazeTestEventsHandler eventsHandler,
+      Label label,
       @Nullable Kind kind,
       TestSuite suite) {
     if (!hasRunChild(suite)) {
       return;
     }
     // only include the innermost 'testsuite' element
-    boolean logSuite = !eventsHandler.ignoreSuite(kind, suite);
+    boolean logSuite = !eventsHandler.ignoreSuite(label, kind, suite);
     if (suite.name != null && logSuite) {
       TestSuiteStarted suiteStarted =
-          new TestSuiteStarted(eventsHandler.suiteDisplayName(kind, suite.name));
-      String locationUrl = eventsHandler.suiteLocationUrl(kind, suite.name);
+          new TestSuiteStarted(eventsHandler.suiteDisplayName(label, kind, suite.name));
+      String locationUrl = eventsHandler.suiteLocationUrl(label, kind, suite.name);
       processor.onSuiteStarted(new TestSuiteStartedEvent(suiteStarted, locationUrl));
     }
 
     for (TestSuite child : suite.testSuites) {
-      processTestSuite(processor, eventsHandler, kind, child);
+      processTestSuite(processor, eventsHandler, label, kind, child);
     }
     for (TestSuite decorator : suite.testDecorators) {
-      processTestSuite(processor, eventsHandler, kind, decorator);
+      processTestSuite(processor, eventsHandler, label, kind, decorator);
     }
     for (TestCase test : suite.testCases) {
-      processTestCase(processor, eventsHandler, kind, suite, test);
+      processTestCase(processor, eventsHandler, label, kind, suite, test);
     }
 
     if (suite.sysOut != null) {
@@ -223,7 +256,7 @@ public class BlazeXmlToTestEventsConverter extends OutputToGeneralTestEventsConv
 
     if (suite.name != null && logSuite) {
       processor.onSuiteFinished(
-          new TestSuiteFinishedEvent(eventsHandler.suiteDisplayName(kind, suite.name)));
+          new TestSuiteFinishedEvent(eventsHandler.suiteDisplayName(label, kind, suite.name)));
     }
   }
 
@@ -284,15 +317,16 @@ public class BlazeXmlToTestEventsConverter extends OutputToGeneralTestEventsConv
   private static void processTestCase(
       GeneralTestEventsProcessor processor,
       BlazeTestEventsHandler eventsHandler,
+      Label label,
       @Nullable Kind kind,
       TestSuite parent,
       TestCase test) {
     if (test.name == null || !wasRun(test) || isCancelled(test)) {
       return;
     }
-    String displayName = eventsHandler.testDisplayName(kind, test.name);
+    String displayName = eventsHandler.testDisplayName(label, kind, test.name);
     String locationUrl =
-        eventsHandler.testLocationUrl(kind, parent.name, test.name, test.classname);
+        eventsHandler.testLocationUrl(label, kind, parent.name, test.name, test.classname);
     processor.onTestStarted(new TestStartedEvent(displayName, locationUrl));
 
     if (test.sysOut != null) {
@@ -311,11 +345,20 @@ public class BlazeXmlToTestEventsConverter extends OutputToGeneralTestEventsConv
               ? test.failures
               : !test.errors.isEmpty() ? test.errors : ImmutableList.of(NO_ERROR);
       for (ErrorOrFailureOrSkipped err : errors) {
+        String content = pruneErrorMessage(err.message, err.content);
         processor.onTestFailure(
-            getTestFailedEvent(displayName, err.message, err.content, parseTimeMillis(test.time)));
+            getTestFailedEvent(displayName, err.message, content, parseTimeMillis(test.time)));
       }
     }
     processor.onTestFinished(new TestFinishedEvent(displayName, parseTimeMillis(test.time)));
+  }
+
+  /**
+   * Remove any duplicate copy of the brief error message from the detailed error content (generally
+   * including a stack trace).
+   */
+  private static String pruneErrorMessage(String message, String content) {
+    return content.replace(message, "");
   }
 
   private static TestFailedEvent getTestFailedEvent(
@@ -364,7 +407,7 @@ public class BlazeXmlToTestEventsConverter extends OutputToGeneralTestEventsConv
         BlazeProjectData projectData =
             BlazeProjectDataManager.getInstance(project).getBlazeProjectData();
         if (projectData != null) {
-          return projectData.blazeVersionData.bazelIsAtLeastVersion(major, minor, bugfix);
+          return projectData.getBlazeVersionData().bazelIsAtLeastVersion(major, minor, bugfix);
         }
       }
     }

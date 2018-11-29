@@ -41,6 +41,7 @@ import com.google.idea.blaze.base.projectview.section.sections.DirectorySection;
 import com.google.idea.blaze.base.scope.BlazeContext;
 import com.google.idea.blaze.base.scope.ErrorCollector;
 import com.google.idea.blaze.base.scope.output.IssueOutput;
+import com.google.idea.blaze.base.settings.Blaze;
 import com.google.idea.blaze.base.settings.BlazeImportSettings;
 import com.google.idea.blaze.base.settings.BlazeImportSettingsManager;
 import com.google.idea.blaze.base.settings.BuildSystem;
@@ -60,6 +61,8 @@ import com.google.idea.blaze.java.sync.source.PackageManifestReader;
 import com.google.idea.blaze.java.sync.source.SourceArtifact;
 import com.google.idea.blaze.scala.sync.model.BlazeScalaImportResult;
 import com.google.idea.blaze.scala.sync.source.ScalaJavaLikeLanguage;
+import com.google.idea.common.experiments.ExperimentService;
+import com.google.idea.common.experiments.MockExperimentService;
 import com.intellij.openapi.extensions.ExtensionPoint;
 import java.io.File;
 import java.util.Map;
@@ -93,6 +96,7 @@ public class BlazeScalaWorkspaceImporterTest extends BlazeTestCase {
 
     applicationServices.register(PrefetchService.class, new MockPrefetchService());
     applicationServices.register(PackageManifestReader.class, new PackageManifestReader());
+    applicationServices.register(ExperimentService.class, new MockExperimentService());
 
     // will silently fall back to FilePathJavaPackageReader
     applicationServices.register(
@@ -258,16 +262,16 @@ public class BlazeScalaWorkspaceImporterTest extends BlazeTestCase {
                 .build());
     // Direct library deps will be double counted.
     assertThat(javaImportResult.libraries).hasSize(2);
-    assertThat(hasLibrary(javaImportResult.libraries, "library1_ijar")).isTrue();
-    assertThat(hasLibrary(javaImportResult.libraries, "library2-ijar")).isTrue();
+    assertThat(hasLibrary(javaImportResult.libraries, "library1")).isTrue();
+    assertThat(hasLibrary(javaImportResult.libraries, "library2")).isTrue();
     assertThat(javaImportResult.javaSourceFiles)
         .containsExactly(
             source("src/main/scala/apps/example/Main.scala"),
             source("src/main/scala/apps/example/subdir/SubdirHelper.scala"));
     assertThat(scalaImportResult.libraries).hasSize(3);
-    assertThat(hasLibrary(scalaImportResult.libraries, "library1_ijar")).isTrue();
-    assertThat(hasLibrary(scalaImportResult.libraries, "library2-ijar")).isTrue();
-    assertThat(hasLibrary(scalaImportResult.libraries, "import-ijar")).isTrue();
+    assertThat(hasLibrary(scalaImportResult.libraries, "library1")).isTrue();
+    assertThat(hasLibrary(scalaImportResult.libraries, "library2")).isTrue();
+    assertThat(hasLibrary(scalaImportResult.libraries, "import")).isTrue();
   }
 
   @Test
@@ -413,7 +417,6 @@ public class BlazeScalaWorkspaceImporterTest extends BlazeTestCase {
                 .build());
     // Direct library deps will be double counted.
     assertThat(javaImportResult.libraries).hasSize(1);
-    assertThat(hasLibrary(javaImportResult.libraries, "library_ijar")).isTrue();
     assertThat(javaImportResult.javaSourceFiles)
         .containsExactly(
             source("src/main/scala/apps/example/Main.scala"),
@@ -421,7 +424,6 @@ public class BlazeScalaWorkspaceImporterTest extends BlazeTestCase {
             source("src/main/scala/apps/other/Main.scala"),
             source("src/main/scala/apps/other/subdir/SubdirHelper.scala"));
     assertThat(scalaImportResult.libraries).hasSize(1);
-    assertThat(hasLibrary(scalaImportResult.libraries, "library_ijar")).isTrue();
   }
 
   @Test
@@ -560,7 +562,7 @@ public class BlazeScalaWorkspaceImporterTest extends BlazeTestCase {
     errorCollector.assertNoIssues();
 
     assertThat(scalaImportResult.libraries).hasSize(1);
-    assertThat(hasLibrary(scalaImportResult.libraries, "library_ijar")).isTrue();
+    assertThat(hasLibrary(scalaImportResult.libraries, "library")).isTrue();
   }
 
   @Test
@@ -618,15 +620,13 @@ public class BlazeScalaWorkspaceImporterTest extends BlazeTestCase {
 
   private static boolean hasLibrary(
       Map<LibraryKey, BlazeJarLibrary> libraries, String libraryName) {
-    return libraries
-        .values()
-        .stream()
+    return libraries.values().stream()
         .anyMatch(
             library ->
                 library
                     .libraryArtifact
                     .jarForIntellijLibrary()
-                    .relativePath
+                    .getRelativePath()
                     .endsWith(libraryName + ".jar"));
   }
 
@@ -637,7 +637,8 @@ public class BlazeScalaWorkspaceImporterTest extends BlazeTestCase {
             WorkspaceType.JAVA,
             ImmutableSet.of(LanguageClass.GENERIC, LanguageClass.SCALA, LanguageClass.JAVA));
     JavaSourceFilter sourceFilter =
-        new JavaSourceFilter(project, workspaceRoot, projectViewSet, targetMap);
+        new JavaSourceFilter(
+            Blaze.getBuildSystem(project), workspaceRoot, projectViewSet, targetMap);
     JdepsMap jdepsMap = key -> ImmutableList.of();
     ArtifactLocationDecoder decoder = location -> new File(location.getRelativePath());
     return new BlazeJavaWorkspaceImporter(

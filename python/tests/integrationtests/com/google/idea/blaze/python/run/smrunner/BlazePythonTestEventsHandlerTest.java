@@ -20,6 +20,8 @@ import static com.google.common.truth.Truth.assertThat;
 import com.google.common.collect.Iterables;
 import com.google.idea.blaze.base.BlazeIntegrationTestCase;
 import com.google.idea.blaze.base.lang.buildfile.psi.util.PsiUtils;
+import com.google.idea.blaze.base.model.primitives.Kind;
+import com.google.idea.blaze.base.model.primitives.Label;
 import com.google.idea.blaze.base.model.primitives.WorkspacePath;
 import com.intellij.execution.Location;
 import com.intellij.openapi.vfs.VirtualFileManager;
@@ -32,9 +34,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
-/**
- * Integration tests for {@link BlazePythonTestEventsHandler}.
- */
+/** Integration tests for {@link BlazePythonTestEventsHandler}. */
 @RunWith(JUnit4.class)
 public class BlazePythonTestEventsHandlerTest extends BlazeIntegrationTestCase {
 
@@ -51,7 +51,7 @@ public class BlazePythonTestEventsHandlerTest extends BlazeIntegrationTestCase {
     PyClass pyClass = PsiUtils.findFirstChildOfClassRecursive(file, PyClass.class);
     assertThat(pyClass).isNotNull();
 
-    String url = handler.suiteLocationUrl(null, "AppUnitTest");
+    String url = handler.suiteLocationUrl(Label.create("//lib:app_unittest"), null, "AppUnitTest");
     Location<?> location = getLocation(url);
     assertThat(location.getPsiElement()).isEqualTo(pyClass);
   }
@@ -68,7 +68,9 @@ public class BlazePythonTestEventsHandlerTest extends BlazeIntegrationTestCase {
     PyFunction function = pyClass.findMethodByName("testApp", false, null);
     assertThat(function).isNotNull();
 
-    String url = handler.testLocationUrl(null, null, "__main__.AppUnitTest.testApp", null);
+    String url =
+        handler.testLocationUrl(
+            Label.create("//lib:app_unittest"), null, null, "__main__.AppUnitTest.testApp", null);
     Location<?> location = getLocation(url);
     assertThat(location.getPsiElement()).isEqualTo(function);
   }
@@ -85,7 +87,9 @@ public class BlazePythonTestEventsHandlerTest extends BlazeIntegrationTestCase {
     PyFunction function = pyClass.findMethodByName("testApp", false, null);
     assertThat(function).isNotNull();
 
-    String url = handler.testLocationUrl(null, null, "__main__.AppUnitTest::testApp", null);
+    String url =
+        handler.testLocationUrl(
+            Label.create("//lib:app_unittest"), null, null, "__main__.AppUnitTest::testApp", null);
     Location<?> location = getLocation(url);
     assertThat(location.getPsiElement()).isEqualTo(function);
   }
@@ -102,7 +106,13 @@ public class BlazePythonTestEventsHandlerTest extends BlazeIntegrationTestCase {
     PyFunction function = pyClass.findMethodByName("testApp", false, null);
     assertThat(function).isNotNull();
 
-    String url = handler.testLocationUrl(null, null, "lib.app.AppUnitTest.testApp", null);
+    String url =
+        handler.testLocationUrl(
+            Label.create("//lib/app:app_unittest"),
+            null,
+            null,
+            "lib.app.AppUnitTest.testApp",
+            null);
     Location<?> location = getLocation(url);
     assertThat(location.getPsiElement()).isEqualTo(function);
   }
@@ -119,5 +129,39 @@ public class BlazePythonTestEventsHandlerTest extends BlazeIntegrationTestCase {
             .getTestLocator()
             .getLocation(protocol, path, getProject(), GlobalSearchScope.allScope(getProject())),
         null);
+  }
+
+  @Test
+  public void testDisplayNameClassTest() {
+    String testName =
+        handler.testDisplayName(
+            Label.create("//lib:app_unittest"),
+            Kind.PY_TEST,
+            "__main__.PythonModule.testDisplayName");
+    assertThat(testName).isEqualTo("testDisplayName");
+  }
+
+  @Test
+  public void testDisplayNameParameterizedTest() {
+    String testName =
+        handler.testDisplayName(
+            Label.create("//lib:app_unittest"), Kind.PY_TEST, "testParameterized(1, 2, 3)");
+    assertThat(testName).isEqualTo("testParameterized(1, 2, 3)");
+  }
+
+  @Test
+  public void testDisplayNameParameterizedTestWithDot() {
+    String testName =
+        handler.testDisplayName(
+            Label.create("//lib:app_unittest"), Kind.PY_TEST, "testParameterized('file.txt')");
+    assertThat(testName).isEqualTo("testParameterized('file.txt')");
+  }
+
+  @Test
+  public void testDisplayNameFallback() {
+    String testName =
+        handler.testDisplayName(
+            Label.create("//lib:app_unittest"), Kind.PY_TEST, "testWithNoDotOrBracket");
+    assertThat(testName).isEqualTo("testWithNoDotOrBracket");
   }
 }

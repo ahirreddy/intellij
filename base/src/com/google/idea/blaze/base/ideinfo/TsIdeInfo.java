@@ -16,23 +16,37 @@
 package com.google.idea.blaze.base.ideinfo;
 
 import com.google.common.collect.ImmutableList;
-import java.io.Serializable;
+import com.google.devtools.intellij.ideinfo.IntellijIdeInfo;
+import java.util.Objects;
 
 /** Ide info specific to typescript rules. */
-public class TsIdeInfo implements Serializable {
-  private static final long serialVersionUID = 1L;
+public final class TsIdeInfo implements ProtoWrapper<IntellijIdeInfo.TsIdeInfo> {
+  private final ImmutableList<ArtifactLocation> sources;
 
-  public final ImmutableList<ArtifactLocation> sources;
-
-  public TsIdeInfo(ImmutableList<ArtifactLocation> sources) {
+  private TsIdeInfo(ImmutableList<ArtifactLocation> sources) {
     this.sources = sources;
+  }
+
+  static TsIdeInfo fromProto(IntellijIdeInfo.TsIdeInfo proto) {
+    return new TsIdeInfo(ProtoWrapper.map(proto.getSourcesList(), ArtifactLocation::fromProto));
+  }
+
+  @Override
+  public IntellijIdeInfo.TsIdeInfo toProto() {
+    return IntellijIdeInfo.TsIdeInfo.newBuilder()
+        .addAllSources(ProtoWrapper.mapToProtos(sources))
+        .build();
+  }
+
+  public ImmutableList<ArtifactLocation> getSources() {
+    return sources;
   }
 
   public static Builder builder() {
     return new Builder();
   }
 
-  /** Builder for js rule info */
+  /** Builder for ts rule info */
   public static class Builder {
     private final ImmutableList.Builder<ArtifactLocation> sources = ImmutableList.builder();
 
@@ -48,6 +62,23 @@ public class TsIdeInfo implements Serializable {
 
   @Override
   public String toString() {
-    return "TsIdeInfo{" + "\n" + "  sources=" + sources + "\n" + '}';
+    return "TsIdeInfo{" + "\n" + "  sources=" + getSources() + "\n" + '}';
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    TsIdeInfo tsIdeInfo = (TsIdeInfo) o;
+    return Objects.equals(sources, tsIdeInfo.sources);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(sources);
   }
 }

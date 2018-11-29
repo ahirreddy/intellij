@@ -20,15 +20,27 @@ import com.google.idea.blaze.base.ideinfo.Dependency;
 import com.google.idea.blaze.base.ideinfo.TargetIdeInfo;
 import com.google.idea.blaze.base.ideinfo.TargetKey;
 import com.google.idea.blaze.base.ideinfo.TargetMap;
+import com.google.idea.blaze.base.model.BlazeProjectData;
+import com.google.idea.blaze.base.sync.SyncCache;
+import com.intellij.openapi.project.Project;
 
 /** Handy class to create an reverse dep map of all targets */
 public class ReverseDependencyMap {
-  public static ImmutableMultimap<TargetKey, TargetKey> createRdepsMap(TargetMap targetMap) {
+  public static ImmutableMultimap<TargetKey, TargetKey> get(Project project) {
+    ImmutableMultimap<TargetKey, TargetKey> map =
+        SyncCache.getInstance(project)
+            .get(ReverseDependencyMap.class, ReverseDependencyMap::createRdepsMap);
+    return map != null ? map : ImmutableMultimap.of();
+  }
+
+  public static ImmutableMultimap<TargetKey, TargetKey> createRdepsMap(
+      Project project, BlazeProjectData projectData) {
+    TargetMap targetMap = projectData.getTargetMap();
     ImmutableMultimap.Builder<TargetKey, TargetKey> builder = ImmutableMultimap.builder();
     for (TargetIdeInfo target : targetMap.targets()) {
-      TargetKey key = target.key;
-      for (Dependency dep : target.dependencies) {
-        TargetKey depKey = dep.targetKey;
+      TargetKey key = target.getKey();
+      for (Dependency dep : target.getDependencies()) {
+        TargetKey depKey = dep.getTargetKey();
         if (targetMap.contains(depKey)) {
           builder.put(depKey, key);
         }

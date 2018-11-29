@@ -21,7 +21,6 @@ import com.google.devtools.intellij.aspect.Common;
 import com.google.idea.blaze.base.BlazeTestCase;
 import com.google.idea.blaze.base.command.info.BlazeInfo;
 import com.google.idea.blaze.base.ideinfo.ArtifactLocation;
-import com.google.idea.blaze.base.sync.aspects.IdeInfoFromProtobuf;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -34,7 +33,7 @@ public class ArtifactLocationDecoderTest extends BlazeTestCase {
   private static final String EXECUTION_ROOT = OUTPUT_BASE + "/execroot/my_proj";
 
   @Test
-  public void testGeneratedArtifact() throws Exception {
+  public void testGeneratedArtifact() {
     ArtifactLocation artifactLocation =
         ArtifactLocation.builder()
             .setRootExecutionPathFragment("/blaze-out/bin")
@@ -48,7 +47,8 @@ public class ArtifactLocationDecoderTest extends BlazeTestCase {
                 OUTPUT_BASE,
                 EXECUTION_ROOT,
                 EXECUTION_ROOT + "/blaze-out/crosstool/bin",
-                EXECUTION_ROOT + "/blaze-out/crosstool/genfiles"),
+                EXECUTION_ROOT + "/blaze-out/crosstool/genfiles",
+                EXECUTION_ROOT + "/blaze-out/crosstool/testlogs"),
             null);
 
     assertThat(decoder.decode(artifactLocation).getPath())
@@ -56,9 +56,9 @@ public class ArtifactLocationDecoderTest extends BlazeTestCase {
   }
 
   @Test
-  public void testExternalSourceArtifactOldFormat() throws Exception {
+  public void testExternalSourceArtifactOldFormat() {
     ArtifactLocation artifactLocation =
-        IdeInfoFromProtobuf.makeArtifactLocation(
+        ArtifactLocation.fromProto(
             Common.ArtifactLocation.newBuilder()
                 .setRelativePath("external/repo_name/com/google/Bla.java")
                 .setIsSource(true)
@@ -75,7 +75,8 @@ public class ArtifactLocationDecoderTest extends BlazeTestCase {
                 OUTPUT_BASE,
                 EXECUTION_ROOT,
                 EXECUTION_ROOT + "/blaze-out/crosstool/bin",
-                EXECUTION_ROOT + "/blaze-out/crosstool/genfiles"),
+                EXECUTION_ROOT + "/blaze-out/crosstool/genfiles",
+                EXECUTION_ROOT + "/blaze-out/crosstool/testlogs"),
             null);
 
     assertThat(decoder.decode(artifactLocation).getPath())
@@ -83,9 +84,9 @@ public class ArtifactLocationDecoderTest extends BlazeTestCase {
   }
 
   @Test
-  public void testExternalDerivedArtifactOldFormat() throws Exception {
+  public void testExternalDerivedArtifactOldFormat() {
     ArtifactLocation artifactLocation =
-        IdeInfoFromProtobuf.makeArtifactLocation(
+        ArtifactLocation.fromProto(
             Common.ArtifactLocation.newBuilder()
                 .setRelativePath("external/repo_name/com/google/Bla.java")
                 .setRootExecutionPathFragment("blaze-out/crosstool/bin")
@@ -103,7 +104,8 @@ public class ArtifactLocationDecoderTest extends BlazeTestCase {
                 OUTPUT_BASE,
                 EXECUTION_ROOT,
                 EXECUTION_ROOT + "/blaze-out/crosstool/bin",
-                EXECUTION_ROOT + "/blaze-out/crosstool/genfiles"),
+                EXECUTION_ROOT + "/blaze-out/crosstool/genfiles",
+                EXECUTION_ROOT + "/blaze-out/crosstool/testlogs"),
             null);
 
     assertThat(decoder.decode(artifactLocation).getPath())
@@ -112,9 +114,9 @@ public class ArtifactLocationDecoderTest extends BlazeTestCase {
   }
 
   @Test
-  public void testExternalSourceArtifactNewFormat() throws Exception {
+  public void testExternalSourceArtifactNewFormat() {
     ArtifactLocation artifactLocation =
-        IdeInfoFromProtobuf.makeArtifactLocation(
+        ArtifactLocation.fromProto(
             Common.ArtifactLocation.newBuilder()
                 .setRelativePath("com/google/Bla.java")
                 .setRootExecutionPathFragment("../repo_name")
@@ -133,7 +135,8 @@ public class ArtifactLocationDecoderTest extends BlazeTestCase {
                 OUTPUT_BASE,
                 EXECUTION_ROOT,
                 EXECUTION_ROOT + "/blaze-out/crosstool/bin",
-                EXECUTION_ROOT + "/blaze-out/crosstool/genfiles"),
+                EXECUTION_ROOT + "/blaze-out/crosstool/genfiles",
+                EXECUTION_ROOT + "/blaze-out/crosstool/testlogs"),
             null);
 
     assertThat(decoder.decode(artifactLocation).getPath())
@@ -141,9 +144,9 @@ public class ArtifactLocationDecoderTest extends BlazeTestCase {
   }
 
   @Test
-  public void testExternalDerivedArtifactNewFormat() throws Exception {
+  public void testExternalDerivedArtifactNewFormat() {
     ArtifactLocation artifactLocation =
-        IdeInfoFromProtobuf.makeArtifactLocation(
+        ArtifactLocation.fromProto(
             Common.ArtifactLocation.newBuilder()
                 .setRelativePath("com/google/Bla.java")
                 .setRootExecutionPathFragment("../repo_name/blaze-out/crosstool/bin")
@@ -161,7 +164,8 @@ public class ArtifactLocationDecoderTest extends BlazeTestCase {
                 OUTPUT_BASE,
                 EXECUTION_ROOT,
                 EXECUTION_ROOT + "/blaze-out/crosstool/bin",
-                EXECUTION_ROOT + "/blaze-out/crosstool/genfiles"),
+                EXECUTION_ROOT + "/blaze-out/crosstool/genfiles",
+                EXECUTION_ROOT + "/blaze-out/crosstool/testlogs"),
             null);
 
     assertThat(decoder.decode(artifactLocation).getPath())

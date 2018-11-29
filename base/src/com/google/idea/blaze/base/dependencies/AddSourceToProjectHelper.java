@@ -15,7 +15,7 @@
  */
 package com.google.idea.blaze.base.dependencies;
 
-import static com.google.idea.common.guava.GuavaHelper.toImmutableList;
+import static com.google.common.collect.ImmutableList.toImmutableList;
 
 import com.google.common.base.Function;
 import com.google.common.base.Preconditions;
@@ -42,7 +42,7 @@ import com.google.idea.blaze.base.projectview.section.sections.DirectoryEntry;
 import com.google.idea.blaze.base.projectview.section.sections.DirectorySection;
 import com.google.idea.blaze.base.projectview.section.sections.TargetSection;
 import com.google.idea.blaze.base.settings.Blaze;
-import com.google.idea.blaze.base.settings.ui.OpenLocalProjectViewAction;
+import com.google.idea.blaze.base.settings.ui.OpenProjectViewAction;
 import com.google.idea.blaze.base.sync.BlazeSyncManager;
 import com.google.idea.blaze.base.sync.data.BlazeProjectDataManager;
 import com.google.idea.blaze.base.sync.projectview.ImportRoots;
@@ -208,7 +208,7 @@ class AddSourceToProjectHelper {
               @Override
               protected void hyperlinkActivated(Notification notification, HyperlinkEvent e) {
                 notification.expire();
-                OpenLocalProjectViewAction.openLocalProjectViewFile(project);
+                OpenProjectViewAction.openLocalProjectViewFile(project);
               }
             });
     notification.notify(project);
@@ -276,7 +276,7 @@ class AddSourceToProjectHelper {
    */
   private static boolean sourceInProjectTargets(
       LocationContext context, Collection<TargetKey> targetsBuildingSource) {
-    if (targetsBuildingSource.stream().anyMatch(context.syncData.targetMap::contains)) {
+    if (targetsBuildingSource.stream().anyMatch(context.syncData.getTargetMap()::contains)) {
       return true;
     }
     List<TargetExpression> projectViewTargets = context.projectViewSet.listItems(TargetSection.KEY);
@@ -288,7 +288,7 @@ class AddSourceToProjectHelper {
             .filter(Objects::nonNull)
             .collect(Collectors.toList());
     for (TargetKey target : targetsBuildingSource) {
-      Label label = target.label;
+      Label label = target.getLabel();
       if (projectViewTargets.contains(label)
           || packageCoveredByWildcardPattern(projectViewTargets, label.blazePackage())) {
         return true;

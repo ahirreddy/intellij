@@ -15,14 +15,17 @@
  */
 package com.google.idea.blaze.base.sync.autosync;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.idea.blaze.base.logging.EventLoggingService;
+import com.google.idea.blaze.base.scope.BlazeContext;
 import com.google.idea.blaze.base.settings.Blaze;
 import com.google.idea.blaze.base.sync.BlazeSyncManager;
 import com.google.idea.blaze.base.sync.BlazeSyncParams;
 import com.google.idea.blaze.base.sync.BlazeSyncParams.SyncMode;
+import com.google.idea.blaze.base.sync.SyncListener;
 import com.google.idea.blaze.base.sync.status.BlazeSyncStatus;
 import com.google.idea.common.experiments.BoolExperiment;
-import com.intellij.openapi.components.AbstractProjectComponent;
+import com.intellij.openapi.components.ProjectComponent;
 import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.fileEditor.FileDocumentManager;
 import com.intellij.openapi.fileEditor.FileEditorManager;
@@ -42,15 +45,29 @@ import javax.annotation.Nullable;
  * Listens for changes to files in the current project, and both updates the sync 'dirty' status and
  * kicks off automatic syncs in response, where appropriate.
  */
-class AutoSyncHandler extends AbstractProjectComponent {
+class AutoSyncHandler implements ProjectComponent {
 
   private static final BoolExperiment autoSyncEnabled =
       new BoolExperiment("blaze.auto.sync.enabled", true);
 
   private static Logger logger = Logger.getInstance(AutoSyncHandler.class);
 
+  private final PendingChangesHandler<VirtualFile> pendingChangesHandler =
+      new PendingChangesHandler<VirtualFile>(/* delayMillis */ 2000) {
+        @Override
+        boolean runTask(ImmutableSet<VirtualFile> changes) {
+          if (BlazeSyncStatus.getInstance(project).syncInProgress()) {
+            return false;
+          }
+          queueAutomaticSync(changes);
+          return true;
+        }
+      };
+
+  private final Project project;
+
   protected AutoSyncHandler(Project project) {
-    super(project);
+    this.project = project;
     if (!Blaze.isBlazeProject(project)) {
       return;
     }
@@ -66,30 +83,46 @@ class AutoSyncHandler extends AbstractProjectComponent {
 
   private void handleFileChange(VirtualFile file) {
     boolean setDirty = false;
-    BlazeSyncParams autoSyncParams = null;
     for (AutoSyncProvider provider : AutoSyncProvider.EP_NAME.getExtensions()) {
-      if (provider.isSyncSensitiveFile(myProject, file)) {
+      if (provider.isSyncSensitiveFile(project, file)) {
         setDirty = true;
-        autoSyncParams = combineSyncParams(autoSyncParams, getSyncParams(provider, file));
+        if (autoSyncEnabled.getValue()) {
+          queueChangedFile(file);
+        }
       }
     }
     if (setDirty) {
-      BlazeSyncStatus.getInstance(myProject).setDirty();
-    }
-    if (autoSyncParams != null && !BlazeSyncStatus.getInstance(myProject).syncInProgress()) {
-      queueAutomaticSync(autoSyncParams);
+      BlazeSyncStatus.getInstance(project).setDirty();
     }
   }
 
-  private void queueAutomaticSync(BlazeSyncParams params) {
+  private void queueChangedFile(VirtualFile file) {
+    if (autoSyncEnabled.getValue()) {
+      pendingChangesHandler.queueChange(file);
+    }
+  }
+
+  private void queueAutomaticSync(ImmutableSet<VirtualFile> changedFiles) {
+    if (!autoSyncEnabled.getValue()) {
+      return;
+    }
+    BlazeSyncParams autoSyncParams = null;
+    for (AutoSyncProvider provider : AutoSyncProvider.EP_NAME.getExtensions()) {
+      for (VirtualFile file : changedFiles) {
+        autoSyncParams = combineSyncParams(autoSyncParams, getSyncParams(provider, file));
+      }
+    }
+    if (autoSyncParams == null) {
+      return;
+    }
     logger.info("Automatic sync queued");
     EventLoggingService.getInstance().ifPresent(s -> s.logEvent(getClass(), "auto-sync"));
-    BlazeSyncManager.getInstance(myProject).requestProjectSync(params);
+    BlazeSyncManager.getInstance(project).requestProjectSync(autoSyncParams);
   }
 
   @Nullable
   private BlazeSyncParams getSyncParams(AutoSyncProvider provider, VirtualFile file) {
-    return autoSyncEnabled.getValue() ? provider.getAutoSyncParamsForFile(myProject, file) : null;
+    return autoSyncEnabled.getValue() ? provider.getAutoSyncParamsForFile(project, file) : null;
   }
 
   @Nullable
@@ -126,6 +159,16 @@ class AutoSyncHandler extends AbstractProjectComponent {
         return 4;
     }
     throw new IllegalArgumentException("Unhandled sync mode: " + mode);
+  }
+
+  static class Listener implements SyncListener {
+    @Override
+    public void onSyncStart(Project project, BlazeContext context, SyncMode syncMode) {
+      // cancel any pending auto-syncs if we're doing a project-wide sync
+      if (syncMode == SyncMode.INCREMENTAL || syncMode == SyncMode.FULL) {
+        project.getComponent(AutoSyncHandler.class).pendingChangesHandler.clearQueue();
+      }
+    }
   }
 
   private class FileListener extends VirtualFileAdapter {

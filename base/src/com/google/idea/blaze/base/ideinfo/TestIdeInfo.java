@@ -15,27 +15,45 @@
  */
 package com.google.idea.blaze.base.ideinfo;
 
+import com.google.devtools.intellij.ideinfo.IntellijIdeInfo;
+import com.google.devtools.intellij.ideinfo.IntellijIdeInfo.TestInfo;
 import com.google.idea.blaze.base.dependencies.TestSize;
-import java.io.Serializable;
+import java.util.Objects;
 import javax.annotation.Nullable;
 
 /** Test info. */
-public class TestIdeInfo implements Serializable {
-  private static final long serialVersionUID = 1L;
+public final class TestIdeInfo implements ProtoWrapper<TestInfo> {
+  private final TestSize testSize;
 
-  public final TestSize testSize;
-
-  public TestIdeInfo(TestSize testSize) {
+  private TestIdeInfo(TestSize testSize) {
     this.testSize = testSize;
+  }
+
+  static TestIdeInfo fromProto(TestInfo proto) {
+
+    TestSize testSize = TestSize.fromString(proto.getSize());
+    if (testSize == null) {
+      testSize = TestSize.DEFAULT_RULE_TEST_SIZE;
+    }
+    return new TestIdeInfo(testSize);
+  }
+
+  @Override
+  public TestInfo toProto() {
+    return IntellijIdeInfo.TestInfo.newBuilder().setSize(testSize.toProto()).build();
+  }
+
+  public TestSize getTestSize() {
+    return testSize;
   }
 
   @Nullable
   public static TestSize getTestSize(TargetIdeInfo target) {
-    TestIdeInfo testIdeInfo = target.testIdeInfo;
+    TestIdeInfo testIdeInfo = target.getTestIdeInfo();
     if (testIdeInfo == null) {
       return null;
     }
-    return testIdeInfo.testSize;
+    return testIdeInfo.getTestSize();
   }
 
   public static Builder builder() {
@@ -54,5 +72,22 @@ public class TestIdeInfo implements Serializable {
     public TestIdeInfo build() {
       return new TestIdeInfo(testSize);
     }
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    TestIdeInfo that = (TestIdeInfo) o;
+    return testSize == that.testSize;
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(testSize);
   }
 }

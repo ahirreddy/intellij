@@ -17,7 +17,6 @@ package com.google.idea.blaze.base.sync;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
@@ -34,7 +33,6 @@ import com.google.idea.blaze.base.command.info.BlazeInfo;
 import com.google.idea.blaze.base.command.info.BlazeInfoRunner;
 import com.google.idea.blaze.base.experiments.ExperimentScope;
 import com.google.idea.blaze.base.filecache.FileCaches;
-import com.google.idea.blaze.base.ideinfo.TargetKey;
 import com.google.idea.blaze.base.ideinfo.TargetMap;
 import com.google.idea.blaze.base.io.FileOperationProvider;
 import com.google.idea.blaze.base.io.VirtualFileSystemProvider;
@@ -73,6 +71,7 @@ import com.google.idea.blaze.base.scope.scopes.TimingScopeListener.TimedEvent;
 import com.google.idea.blaze.base.settings.Blaze;
 import com.google.idea.blaze.base.settings.BlazeImportSettings;
 import com.google.idea.blaze.base.settings.BlazeUserSettings;
+import com.google.idea.blaze.base.settings.BlazeUserSettings.FocusBehavior;
 import com.google.idea.blaze.base.sync.BlazeSyncParams.SyncMode;
 import com.google.idea.blaze.base.sync.BlazeSyncPlugin.ModuleEditor;
 import com.google.idea.blaze.base.sync.SyncListener.SyncResult;
@@ -100,7 +99,6 @@ import com.google.idea.blaze.base.sync.workspace.ArtifactLocationDecoderImpl;
 import com.google.idea.blaze.base.sync.workspace.WorkingSet;
 import com.google.idea.blaze.base.sync.workspace.WorkspacePathResolver;
 import com.google.idea.blaze.base.sync.workspace.WorkspacePathResolverImpl;
-import com.google.idea.blaze.base.targetmaps.ReverseDependencyMap;
 import com.google.idea.blaze.base.util.SaveUtil;
 import com.google.idea.blaze.base.vcs.BlazeVcsHandler;
 import com.google.idea.common.transactions.Transactions;
@@ -118,7 +116,6 @@ import com.intellij.openapi.roots.ex.ProjectRootManagerEx;
 import com.intellij.openapi.util.io.FileUtil;
 import com.intellij.openapi.vfs.VirtualFileManager;
 import java.io.File;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -177,21 +174,27 @@ final class BlazeSyncTask implements Progressive {
           context.push(new ProgressIndicatorScope(indicator));
 
           BlazeUserSettings userSettings = BlazeUserSettings.getInstance();
-          if (!syncParams.backgroundSync) {
-            context
-                .push(
-                    new BlazeConsoleScope.Builder(project, indicator)
-                        .setPopupBehavior(userSettings.getShowBlazeConsoleOnSync())
-                        .addConsoleFilters(
-                            new IssueOutputFilter(project, workspaceRoot, ContextType.Sync, true))
-                        .build())
-                .push(new IssuesScope(project, userSettings.getShowProblemsViewOnSync()))
-                .push(new IdeaLogScope());
-            if (syncParams.syncMode != SyncMode.NO_BUILD) {
-              context.push(
-                  new NotificationScope(
-                      project, "Sync", "Sync project", "Sync successful", "Sync failed"));
-            }
+          context
+              .push(
+                  new BlazeConsoleScope.Builder(project, indicator)
+                      .setPopupBehavior(
+                          syncParams.backgroundSync
+                              ? FocusBehavior.NEVER
+                              : userSettings.getShowBlazeConsoleOnSync())
+                      .addConsoleFilters(
+                          new IssueOutputFilter(project, workspaceRoot, ContextType.Sync, true))
+                      .build())
+              .push(
+                  new IssuesScope(
+                      project,
+                      syncParams.backgroundSync
+                          ? FocusBehavior.NEVER
+                          : userSettings.getShowProblemsViewOnSync()))
+              .push(new IdeaLogScope());
+          if (!syncParams.backgroundSync && syncParams.syncMode != SyncMode.NO_BUILD) {
+            context.push(
+                new NotificationScope(
+                    project, "Sync", "Sync project", "Sync successful", "Sync failed"));
           }
 
           context.output(new StatusOutput(String.format("Syncing project: %s...", syncParams)));
@@ -201,17 +204,14 @@ final class BlazeSyncTask implements Progressive {
 
   @Nullable
   private BlazeProjectData getOldProjectData(BlazeContext context) {
-    try {
-      return BlazeProjectDataManagerImpl.getImpl(project).loadProjectRoot(importSettings);
-    } catch (IOException e) {
-      logger.info(e);
-      if (syncParams.syncMode != SyncMode.NO_BUILD) {
-        context.output(
-            new StatusOutput(
-                "Couldn't load previously cached project data; full sync will be needed"));
-      }
-      return null;
+    BlazeProjectData blazeProjectData =
+        BlazeProjectDataManagerImpl.getImpl(project).loadProjectRoot(importSettings);
+    if (blazeProjectData == null && syncParams.syncMode != SyncMode.NO_BUILD) {
+      context.output(
+          new StatusOutput(
+              "Couldn't load previously cached project data; full sync will be needed"));
     }
+    return blazeProjectData;
   }
 
   /** Returns true if sync successfully completed */
@@ -315,12 +315,13 @@ final class BlazeSyncTask implements Progressive {
         BlazeFlags.blazeFlags(
             project, projectViewSet, BlazeCommandName.INFO, BlazeInvocationContext.SYNC_CONTEXT);
     syncStats.setSyncFlags(syncFlags);
+    syncStats.setSyncBinaryType(Blaze.getBuildSystemProvider(project).getSyncBinaryType());
     ListenableFuture<BlazeInfo> blazeInfoFuture =
         BlazeInfoRunner.getInstance()
             .runBlazeInfo(
                 context,
                 importSettings.getBuildSystem(),
-                Blaze.getBuildSystemProvider(project).getSyncBinaryPath(),
+                Blaze.getBuildSystemProvider(project).getSyncBinaryPath(project),
                 workspaceRoot,
                 syncFlags);
 
@@ -353,7 +354,7 @@ final class BlazeSyncTask implements Progressive {
     WorkspaceLanguageSettings workspaceLanguageSettings =
         LanguageSupport.createWorkspaceLanguageSettings(projectViewSet);
 
-    syncStats.setLanguagesActive(new ArrayList<>(workspaceLanguageSettings.activeLanguages));
+    syncStats.setLanguagesActive(new ArrayList<>(workspaceLanguageSettings.getActiveLanguages()));
     syncStats.setWorkspaceType(workspaceLanguageSettings.getWorkspaceType());
 
     for (BlazeSyncPlugin syncPlugin : BlazeSyncPlugin.EP_NAME.getExtensions()) {
@@ -387,7 +388,7 @@ final class BlazeSyncTask implements Progressive {
 
     SyncState.Builder syncStateBuilder = new SyncState.Builder();
     SyncState previousSyncState =
-        oldBlazeProjectData != null ? oldBlazeProjectData.syncState : null;
+        oldBlazeProjectData != null ? oldBlazeProjectData.getSyncState() : null;
 
     List<TargetExpression> targets = Lists.newArrayList();
     if (syncParams.addProjectViewTargets) {
@@ -429,6 +430,7 @@ final class BlazeSyncTask implements Progressive {
             project,
             context,
             projectViewSet,
+            blazeInfo,
             blazeVersionData,
             configHandler,
             shardedTargets,
@@ -436,7 +438,8 @@ final class BlazeSyncTask implements Progressive {
             artifactLocationDecoder,
             syncStateBuilder,
             previousSyncState,
-            mergeWithOldState);
+            mergeWithOldState,
+            oldBlazeProjectData != null ? oldBlazeProjectData.getTargetMap() : null);
     if (context.isCancelled()) {
       return SyncResult.CANCELLED;
     }
@@ -455,15 +458,13 @@ final class BlazeSyncTask implements Progressive {
         PrintOutput.log("Target map size: " + ideQueryResult.targetMap.targets().size()));
     BuildResult ideInfoResult = ideQueryResult.buildResult;
 
-    ListenableFuture<ImmutableMultimap<TargetKey, TargetKey>> reverseDependenciesFuture =
-        BlazeExecutor.getInstance().submit(() -> ReverseDependencyMap.createRdepsMap(targetMap));
-
     BuildResult ideResolveResult =
         resolveIdeArtifacts(
             project,
             context,
             workspaceRoot,
             projectViewSet,
+            blazeInfo,
             blazeVersionData,
             workspaceLanguageSettings,
             shardedTargets);
@@ -501,16 +502,6 @@ final class BlazeSyncTask implements Progressive {
           }
         });
 
-    ImmutableMultimap<TargetKey, TargetKey> reverseDependencies =
-        FutureUtil.waitForFuture(context, reverseDependenciesFuture)
-            .timed("ReverseDependencies", EventType.Other)
-            .onError("Failed to compute reverse dependency map")
-            .run()
-            .result();
-    if (reverseDependencies == null) {
-      return SyncResult.FAILURE;
-    }
-
     newBlazeProjectData =
         new BlazeProjectData(
             syncStartTime,
@@ -520,8 +511,7 @@ final class BlazeSyncTask implements Progressive {
             workspacePathResolver,
             artifactLocationDecoder,
             workspaceLanguageSettings,
-            syncStateBuilder.build(),
-            reverseDependencies);
+            syncStateBuilder.build());
 
     FileCaches.onSync(project, context, projectViewSet, newBlazeProjectData, syncParams.syncMode);
     ListenableFuture<?> prefetch =
@@ -669,15 +659,11 @@ final class BlazeSyncTask implements Progressive {
   private void printWorkingSet(BlazeContext context, WorkingSet workingSet) {
     List<String> messages = Lists.newArrayList();
     messages.addAll(
-        workingSet
-            .addedFiles
-            .stream()
+        workingSet.addedFiles.stream()
             .map(file -> file.relativePath() + " (added)")
             .collect(Collectors.toList()));
     messages.addAll(
-        workingSet
-            .modifiedFiles
-            .stream()
+        workingSet.modifiedFiles.stream()
             .map(file -> file.relativePath() + " (modified)")
             .collect(Collectors.toList()));
     Collections.sort(messages);
@@ -731,6 +717,7 @@ final class BlazeSyncTask implements Progressive {
       Project project,
       BlazeContext parentContext,
       ProjectViewSet projectViewSet,
+      BlazeInfo blazeInfo,
       BlazeVersionData blazeVersionData,
       BlazeConfigurationHandler configHandler,
       ShardedTargetList shardedTargets,
@@ -738,7 +725,8 @@ final class BlazeSyncTask implements Progressive {
       ArtifactLocationDecoder artifactLocationDecoder,
       Builder syncStateBuilder,
       @Nullable SyncState previousSyncState,
-      boolean mergeWithOldState) {
+      boolean mergeWithOldState,
+      @Nullable TargetMap oldTargetMap) {
 
     return Scope.push(
         parentContext,
@@ -753,6 +741,7 @@ final class BlazeSyncTask implements Progressive {
               context,
               workspaceRoot,
               projectViewSet,
+              blazeInfo,
               blazeVersionData,
               configHandler,
               shardedTargets,
@@ -760,7 +749,8 @@ final class BlazeSyncTask implements Progressive {
               artifactLocationDecoder,
               syncStateBuilder,
               previousSyncState,
-              mergeWithOldState);
+              mergeWithOldState,
+              oldTargetMap);
         });
   }
 
@@ -769,6 +759,7 @@ final class BlazeSyncTask implements Progressive {
       BlazeContext parentContext,
       WorkspaceRoot workspaceRoot,
       ProjectViewSet projectViewSet,
+      BlazeInfo blazeInfo,
       BlazeVersionData blazeVersionData,
       WorkspaceLanguageSettings workspaceLanguageSettings,
       ShardedTargetList shardedTargets) {
@@ -791,6 +782,7 @@ final class BlazeSyncTask implements Progressive {
               context,
               workspaceRoot,
               projectViewSet,
+              blazeInfo,
               blazeVersionData,
               workspaceLanguageSettings,
               shardedTargets);
@@ -860,7 +852,7 @@ final class BlazeSyncTask implements Progressive {
     for (BlazeSyncPlugin syncPlugin : BlazeSyncPlugin.EP_NAME.getExtensions()) {
       workspaceModuleType =
           syncPlugin.getWorkspaceModuleType(
-              newBlazeProjectData.workspaceLanguageSettings.getWorkspaceType());
+              newBlazeProjectData.getWorkspaceLanguageSettings().getWorkspaceType());
       if (workspaceModuleType != null) {
         break;
       }
@@ -1007,8 +999,7 @@ final class BlazeSyncTask implements Progressive {
   private SyncStats buildStats(SyncStats.Builder stats) {
     synchronized (this) {
       long blazeExecTime =
-          timedEvents
-              .stream()
+          timedEvents.stream()
               .filter(e -> e.isLeafEvent && e.type == EventType.BlazeInvocation)
               .mapToLong(e -> e.durationMillis)
               .sum();
