@@ -18,51 +18,47 @@ package com.google.idea.blaze.base.ideinfo;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
+import com.google.devtools.intellij.ideinfo.IntellijIdeInfo;
+import com.google.devtools.intellij.ideinfo.IntellijIdeInfo.Dependency.DependencyType;
 import com.google.idea.blaze.base.dependencies.TargetInfo;
-import com.google.idea.blaze.base.ideinfo.Dependency.DependencyType;
 import com.google.idea.blaze.base.model.primitives.Kind;
 import com.google.idea.blaze.base.model.primitives.Label;
-import java.io.Serializable;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
+import java.util.Objects;
 import javax.annotation.Nullable;
 
 /** Simple implementation of TargetIdeInfo. */
-public final class TargetIdeInfo implements Serializable {
-  private static final long serialVersionUID = 19L;
+public final class TargetIdeInfo implements ProtoWrapper<IntellijIdeInfo.TargetIdeInfo> {
+  private final TargetKey key;
+  private final Kind kind;
+  @Nullable private final ArtifactLocation buildFile;
+  private final ImmutableList<Dependency> dependencies;
+  private final ImmutableList<String> tags;
+  private final ImmutableSet<ArtifactLocation> sources;
+  @Nullable private final CIdeInfo cIdeInfo;
+  @Nullable private final CToolchainIdeInfo cToolchainIdeInfo;
+  @Nullable private final JavaIdeInfo javaIdeInfo;
+  @Nullable private final AndroidIdeInfo androidIdeInfo;
+  @Nullable private final AndroidSdkIdeInfo androidSdkIdeInfo;
+  @Nullable private final AndroidAarIdeInfo androidAarIdeInfo;
+  @Nullable private final PyIdeInfo pyIdeInfo;
+  @Nullable private final GoIdeInfo goIdeInfo;
+  @Nullable private final JsIdeInfo jsIdeInfo;
+  @Nullable private final TsIdeInfo tsIdeInfo;
+  @Nullable private final DartIdeInfo dartIdeInfo;
+  @Nullable private final TestIdeInfo testIdeInfo;
+  @Nullable private final JavaToolchainIdeInfo javaToolchainIdeInfo;
+  @Nullable private final KotlinToolchainIdeInfo kotlinToolchainIdeInfo;
 
-  public final TargetKey key;
-  public final Kind kind;
-  @Nullable public final ArtifactLocation buildFile;
-  public final Collection<Dependency> dependencies;
-  public final Collection<String> tags;
-  public final List<ArtifactLocation> sources;
-  @Nullable public final CIdeInfo cIdeInfo;
-  @Nullable public final CToolchainIdeInfo cToolchainIdeInfo;
-  @Nullable public final JavaIdeInfo javaIdeInfo;
-  @Nullable public final AndroidIdeInfo androidIdeInfo;
-  @Nullable public final AndroidSdkIdeInfo androidSdkIdeInfo;
-  @Nullable public final AndroidAarIdeInfo androidAarIdeInfo;
-  @Nullable public final PyIdeInfo pyIdeInfo;
-  @Nullable public final GoIdeInfo goIdeInfo;
-  @Nullable public final JsIdeInfo jsIdeInfo;
-  @Nullable public final TsIdeInfo tsIdeInfo;
-  @Nullable public final DartIdeInfo dartIdeInfo;
-  @Nullable public final TestIdeInfo testIdeInfo;
-  @Nullable public final JavaToolchainIdeInfo javaToolchainIdeInfo;
-  @Nullable public final KotlinToolchainIdeInfo kotlinToolchainIdeInfo;
-
-  public TargetIdeInfo(
+  private TargetIdeInfo(
       TargetKey key,
       Kind kind,
       @Nullable ArtifactLocation buildFile,
-      Collection<Dependency> dependencies,
-      Collection<String> tags,
-      Set<ArtifactLocation> sources,
+      ImmutableList<Dependency> dependencies,
+      ImmutableList<String> tags,
+      ImmutableSet<ArtifactLocation> sources,
       @Nullable CIdeInfo cIdeInfo,
       @Nullable CToolchainIdeInfo cToolchainIdeInfo,
       @Nullable JavaIdeInfo javaIdeInfo,
@@ -82,8 +78,7 @@ public final class TargetIdeInfo implements Serializable {
     this.buildFile = buildFile;
     this.dependencies = dependencies;
     this.tags = tags;
-    // can't convert to a set without bumping the serialization version
-    this.sources = new ArrayList<>(sources);
+    this.sources = sources;
     this.cIdeInfo = cIdeInfo;
     this.cToolchainIdeInfo = cToolchainIdeInfo;
     this.javaIdeInfo = javaIdeInfo;
@@ -100,16 +95,218 @@ public final class TargetIdeInfo implements Serializable {
     this.kotlinToolchainIdeInfo = kotlinToolchainIdeInfo;
   }
 
+  @Nullable
+  public static TargetIdeInfo fromProto(IntellijIdeInfo.TargetIdeInfo proto) {
+    TargetKey key = proto.hasKey() ? TargetKey.fromProto(proto.getKey()) : null;
+    Kind kind = Kind.fromProto(proto);
+    if (key == null || kind == null) {
+      return null;
+    }
+    ImmutableSet.Builder<ArtifactLocation> sourcesBuilder = ImmutableSet.builder();
+    CIdeInfo cIdeInfo = null;
+    if (proto.hasCIdeInfo()) {
+      cIdeInfo = CIdeInfo.fromProto(proto.getCIdeInfo());
+      sourcesBuilder.addAll(cIdeInfo.getSources());
+      sourcesBuilder.addAll(cIdeInfo.getHeaders());
+      sourcesBuilder.addAll(cIdeInfo.getTextualHeaders());
+    }
+    JavaIdeInfo javaIdeInfo = null;
+    if (proto.hasJavaIdeInfo()) {
+      javaIdeInfo = JavaIdeInfo.fromProto(proto.getJavaIdeInfo());
+      sourcesBuilder.addAll(
+          ProtoWrapper.map(proto.getJavaIdeInfo().getSourcesList(), ArtifactLocation::fromProto));
+    }
+    PyIdeInfo pyIdeInfo = null;
+    if (proto.hasPyIdeInfo()) {
+      pyIdeInfo = PyIdeInfo.fromProto(proto.getPyIdeInfo());
+      sourcesBuilder.addAll(pyIdeInfo.getSources());
+    }
+    GoIdeInfo goIdeInfo = null;
+    if (proto.hasGoIdeInfo()) {
+      goIdeInfo = GoIdeInfo.fromProto(proto.getGoIdeInfo(), key.getLabel(), kind);
+      sourcesBuilder.addAll(goIdeInfo.getSources());
+    }
+    JsIdeInfo jsIdeInfo = null;
+    if (proto.hasJsIdeInfo()) {
+      jsIdeInfo = JsIdeInfo.fromProto(proto.getJsIdeInfo());
+      sourcesBuilder.addAll(jsIdeInfo.getSources());
+    }
+    TsIdeInfo tsIdeInfo = null;
+    if (proto.hasTsIdeInfo()) {
+      tsIdeInfo = TsIdeInfo.fromProto(proto.getTsIdeInfo());
+      sourcesBuilder.addAll(tsIdeInfo.getSources());
+    }
+    DartIdeInfo dartIdeInfo = null;
+    if (proto.hasDartIdeInfo()) {
+      dartIdeInfo = DartIdeInfo.fromProto(proto.getDartIdeInfo());
+      sourcesBuilder.addAll(dartIdeInfo.getSources());
+    }
+    return new TargetIdeInfo(
+        key,
+        kind,
+        proto.hasBuildFileArtifactLocation()
+            ? ArtifactLocation.fromProto(proto.getBuildFileArtifactLocation())
+            : null,
+        ProtoWrapper.map(proto.getDepsList(), Dependency::fromProto),
+        ProtoWrapper.internStrings(proto.getTagsList()),
+        sourcesBuilder.build(),
+        cIdeInfo,
+        proto.hasCToolchainIdeInfo()
+            ? CToolchainIdeInfo.fromProto(proto.getCToolchainIdeInfo())
+            : null,
+        javaIdeInfo,
+        proto.hasAndroidIdeInfo() ? AndroidIdeInfo.fromProto(proto.getAndroidIdeInfo()) : null,
+        proto.hasAndroidSdkIdeInfo()
+            ? AndroidSdkIdeInfo.fromProto(proto.getAndroidSdkIdeInfo())
+            : null,
+        proto.hasAndroidAarIdeInfo()
+            ? AndroidAarIdeInfo.fromProto(proto.getAndroidAarIdeInfo())
+            : null,
+        pyIdeInfo,
+        goIdeInfo,
+        jsIdeInfo,
+        tsIdeInfo,
+        dartIdeInfo,
+        proto.hasTestInfo() ? TestIdeInfo.fromProto(proto.getTestInfo()) : null,
+        proto.hasJavaToolchainIdeInfo()
+            ? JavaToolchainIdeInfo.fromProto(proto.getJavaToolchainIdeInfo())
+            : null,
+        proto.hasKtToolchainIdeInfo()
+            ? KotlinToolchainIdeInfo.fromProto(proto.getKtToolchainIdeInfo())
+            : null);
+  }
+
+  @Override
+  public IntellijIdeInfo.TargetIdeInfo toProto() {
+    IntellijIdeInfo.TargetIdeInfo.Builder builder =
+        IntellijIdeInfo.TargetIdeInfo.newBuilder()
+            .setKey(key.toProto())
+            .setKindString(kind.toProto())
+            .addAllDeps(ProtoWrapper.mapToProtos(dependencies))
+            .addAllTags(tags);
+    ProtoWrapper.unwrapAndSetIfNotNull(builder::setBuildFileArtifactLocation, buildFile);
+    ProtoWrapper.unwrapAndSetIfNotNull(builder::setCIdeInfo, cIdeInfo);
+    ProtoWrapper.unwrapAndSetIfNotNull(builder::setCToolchainIdeInfo, cToolchainIdeInfo);
+    ProtoWrapper.unwrapAndSetIfNotNull(builder::setJavaIdeInfo, javaIdeInfo);
+    ProtoWrapper.unwrapAndSetIfNotNull(builder::setAndroidIdeInfo, androidIdeInfo);
+    ProtoWrapper.unwrapAndSetIfNotNull(builder::setAndroidSdkIdeInfo, androidSdkIdeInfo);
+    ProtoWrapper.unwrapAndSetIfNotNull(builder::setAndroidAarIdeInfo, androidAarIdeInfo);
+    ProtoWrapper.unwrapAndSetIfNotNull(builder::setPyIdeInfo, pyIdeInfo);
+    ProtoWrapper.unwrapAndSetIfNotNull(builder::setGoIdeInfo, goIdeInfo);
+    ProtoWrapper.unwrapAndSetIfNotNull(builder::setJsIdeInfo, jsIdeInfo);
+    ProtoWrapper.unwrapAndSetIfNotNull(builder::setTsIdeInfo, tsIdeInfo);
+    ProtoWrapper.unwrapAndSetIfNotNull(builder::setDartIdeInfo, dartIdeInfo);
+    ProtoWrapper.unwrapAndSetIfNotNull(builder::setTestInfo, testIdeInfo);
+    ProtoWrapper.unwrapAndSetIfNotNull(builder::setJavaToolchainIdeInfo, javaToolchainIdeInfo);
+    ProtoWrapper.unwrapAndSetIfNotNull(builder::setKtToolchainIdeInfo, kotlinToolchainIdeInfo);
+    return builder.build();
+  }
+
+  public TargetKey getKey() {
+    return key;
+  }
+
+  public Kind getKind() {
+    return kind;
+  }
+
+  @Nullable
+  public ArtifactLocation getBuildFile() {
+    return buildFile;
+  }
+
+  public ImmutableList<Dependency> getDependencies() {
+    return dependencies;
+  }
+
+  public ImmutableList<String> getTags() {
+    return tags;
+  }
+
+  public ImmutableSet<ArtifactLocation> getSources() {
+    return sources;
+  }
+
+  @Nullable
+  public CIdeInfo getcIdeInfo() {
+    return cIdeInfo;
+  }
+
+  @Nullable
+  public CToolchainIdeInfo getcToolchainIdeInfo() {
+    return cToolchainIdeInfo;
+  }
+
+  @Nullable
+  public JavaIdeInfo getJavaIdeInfo() {
+    return javaIdeInfo;
+  }
+
+  @Nullable
+  public AndroidIdeInfo getAndroidIdeInfo() {
+    return androidIdeInfo;
+  }
+
+  @Nullable
+  public AndroidSdkIdeInfo getAndroidSdkIdeInfo() {
+    return androidSdkIdeInfo;
+  }
+
+  @Nullable
+  public AndroidAarIdeInfo getAndroidAarIdeInfo() {
+    return androidAarIdeInfo;
+  }
+
+  @Nullable
+  public PyIdeInfo getPyIdeInfo() {
+    return pyIdeInfo;
+  }
+
+  @Nullable
+  public GoIdeInfo getGoIdeInfo() {
+    return goIdeInfo;
+  }
+
+  @Nullable
+  public JsIdeInfo getJsIdeInfo() {
+    return jsIdeInfo;
+  }
+
+  @Nullable
+  public TsIdeInfo getTsIdeInfo() {
+    return tsIdeInfo;
+  }
+
+  @Nullable
+  public DartIdeInfo getDartIdeInfo() {
+    return dartIdeInfo;
+  }
+
+  @Nullable
+  public TestIdeInfo getTestIdeInfo() {
+    return testIdeInfo;
+  }
+
+  @Nullable
+  public JavaToolchainIdeInfo getJavaToolchainIdeInfo() {
+    return javaToolchainIdeInfo;
+  }
+
+  @Nullable
+  public KotlinToolchainIdeInfo getKotlinToolchainIdeInfo() {
+    return kotlinToolchainIdeInfo;
+  }
+
   public TargetInfo toTargetInfo() {
-    return TargetInfo.builder(key.label, kind.toString())
-        .setTestSize(testIdeInfo != null ? testIdeInfo.testSize : null)
-        .setSources(ImmutableList.copyOf(sources))
+    return TargetInfo.builder(getKey().getLabel(), getKind().toString())
+        .setTestSize(getTestIdeInfo() != null ? getTestIdeInfo().getTestSize() : null)
+        .setSources(ImmutableList.copyOf(getSources()))
         .build();
   }
 
   @Override
   public String toString() {
-    return key.toString();
+    return getKey().toString();
   }
 
   /** Returns whether this rule is one of the kinds. */
@@ -119,28 +316,27 @@ public final class TargetIdeInfo implements Serializable {
 
   /** Returns whether this rule is one of the kinds. */
   public boolean kindIsOneOf(Collection<Kind> kinds) {
-    if (kind != null) {
-      return kind.isOneOf(kinds);
+    if (getKind() != null) {
+      return getKind().isOneOf(kinds);
     }
     return false;
   }
 
   public boolean isPlainTarget() {
-    return key.isPlainTarget();
+    return getKey().isPlainTarget();
   }
 
   public static Builder builder() {
     return new Builder();
   }
-
   /** Builder for rule ide info */
   public static class Builder {
     private TargetKey key;
     private Kind kind;
     private ArtifactLocation buildFile;
-    private final List<Dependency> dependencies = new ArrayList<>();
-    private final List<String> tags = new ArrayList<>();
-    private final Set<ArtifactLocation> sources = new HashSet<>();
+    private final ImmutableList.Builder<Dependency> dependencies = ImmutableList.builder();
+    private final ImmutableList.Builder<String> tags = ImmutableList.builder();
+    private final ImmutableSet.Builder<ArtifactLocation> sources = ImmutableSet.builder();
     private CIdeInfo cIdeInfo;
     private CToolchainIdeInfo cToolchainIdeInfo;
     private JavaIdeInfo javaIdeInfo;
@@ -196,9 +392,9 @@ public final class TargetIdeInfo implements Serializable {
 
     public Builder setCInfo(CIdeInfo.Builder cInfoBuilder) {
       this.cIdeInfo = cInfoBuilder.build();
-      this.sources.addAll(cIdeInfo.sources);
-      this.sources.addAll(cIdeInfo.headers);
-      this.sources.addAll(cIdeInfo.textualHeaders);
+      this.sources.addAll(cIdeInfo.getSources());
+      this.sources.addAll(cIdeInfo.getHeaders());
+      this.sources.addAll(cIdeInfo.getTextualHeaders());
       return this;
     }
 
@@ -287,9 +483,9 @@ public final class TargetIdeInfo implements Serializable {
           key,
           kind,
           buildFile,
-          dependencies,
-          tags,
-          sources,
+          dependencies.build(),
+          tags.build(),
+          sources.build(),
           cIdeInfo,
           cToolchainIdeInfo,
           javaIdeInfo,
@@ -305,5 +501,61 @@ public final class TargetIdeInfo implements Serializable {
           javaToolchainIdeInfo,
           kotlinToolchainIdeInfo);
     }
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    TargetIdeInfo that = (TargetIdeInfo) o;
+    return Objects.equals(key, that.key)
+        && kind == that.kind
+        && Objects.equals(buildFile, that.buildFile)
+        && Objects.equals(dependencies, that.dependencies)
+        && Objects.equals(tags, that.tags)
+        && Objects.equals(sources, that.sources)
+        && Objects.equals(cIdeInfo, that.cIdeInfo)
+        && Objects.equals(cToolchainIdeInfo, that.cToolchainIdeInfo)
+        && Objects.equals(javaIdeInfo, that.javaIdeInfo)
+        && Objects.equals(androidIdeInfo, that.androidIdeInfo)
+        && Objects.equals(androidSdkIdeInfo, that.androidSdkIdeInfo)
+        && Objects.equals(androidAarIdeInfo, that.androidAarIdeInfo)
+        && Objects.equals(pyIdeInfo, that.pyIdeInfo)
+        && Objects.equals(goIdeInfo, that.goIdeInfo)
+        && Objects.equals(jsIdeInfo, that.jsIdeInfo)
+        && Objects.equals(tsIdeInfo, that.tsIdeInfo)
+        && Objects.equals(dartIdeInfo, that.dartIdeInfo)
+        && Objects.equals(testIdeInfo, that.testIdeInfo)
+        && Objects.equals(javaToolchainIdeInfo, that.javaToolchainIdeInfo)
+        && Objects.equals(kotlinToolchainIdeInfo, that.kotlinToolchainIdeInfo);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(
+        key,
+        kind,
+        buildFile,
+        dependencies,
+        tags,
+        sources,
+        cIdeInfo,
+        cToolchainIdeInfo,
+        javaIdeInfo,
+        androidIdeInfo,
+        androidSdkIdeInfo,
+        androidAarIdeInfo,
+        pyIdeInfo,
+        goIdeInfo,
+        jsIdeInfo,
+        tsIdeInfo,
+        dartIdeInfo,
+        testIdeInfo,
+        javaToolchainIdeInfo,
+        kotlinToolchainIdeInfo);
   }
 }

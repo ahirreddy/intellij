@@ -19,16 +19,19 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableList;
-import java.io.Serializable;
+import com.google.devtools.intellij.ideinfo.IntellijIdeInfo;
+import com.google.idea.common.experiments.BoolExperiment;
 import javax.annotation.Nullable;
 
 /** Represents a jar artifact. */
-public class LibraryArtifact implements Serializable {
-  private static final long serialVersionUID = 3L;
+public final class LibraryArtifact implements ProtoWrapper<IntellijIdeInfo.LibraryArtifact> {
 
-  @Nullable public final ArtifactLocation interfaceJar;
-  @Nullable public final ArtifactLocation classJar;
-  public final ImmutableList<ArtifactLocation> sourceJars;
+  private static final BoolExperiment indexClassJarIfNoSrcJars =
+      new BoolExperiment("blaze.use.class.jar", true);
+
+  @Nullable private final ArtifactLocation interfaceJar;
+  @Nullable private final ArtifactLocation classJar;
+  private final ImmutableList<ArtifactLocation> sourceJars;
 
   public LibraryArtifact(
       @Nullable ArtifactLocation interfaceJar,
@@ -37,10 +40,44 @@ public class LibraryArtifact implements Serializable {
     if (interfaceJar == null && classJar == null) {
       throw new IllegalArgumentException("Interface and class jars cannot both be null.");
     }
-
     this.interfaceJar = interfaceJar;
     this.classJar = classJar;
     this.sourceJars = checkNotNull(sourceJars);
+  }
+
+  public static LibraryArtifact fromProto(IntellijIdeInfo.LibraryArtifact proto) {
+    return new LibraryArtifact(
+        proto.hasInterfaceJar() ? ArtifactLocation.fromProto(proto.getInterfaceJar()) : null,
+        proto.hasJar() ? ArtifactLocation.fromProto(proto.getJar()) : null,
+        !proto.getSourceJarsList().isEmpty()
+            ? ProtoWrapper.map(proto.getSourceJarsList(), ArtifactLocation::fromProto)
+            : proto.hasSourceJar()
+                ? ImmutableList.of(ArtifactLocation.fromProto(proto.getSourceJar()))
+                : ImmutableList.of());
+  }
+
+  @Override
+  public IntellijIdeInfo.LibraryArtifact toProto() {
+    IntellijIdeInfo.LibraryArtifact.Builder builder =
+        IntellijIdeInfo.LibraryArtifact.newBuilder()
+            .addAllSourceJars(ProtoWrapper.mapToProtos(sourceJars));
+    ProtoWrapper.unwrapAndSetIfNotNull(builder::setInterfaceJar, interfaceJar);
+    ProtoWrapper.unwrapAndSetIfNotNull(builder::setJar, classJar);
+    return builder.build();
+  }
+
+  @Nullable
+  public ArtifactLocation getInterfaceJar() {
+    return interfaceJar;
+  }
+
+  @Nullable
+  public ArtifactLocation getClassJar() {
+    return classJar;
+  }
+
+  public ImmutableList<ArtifactLocation> getSourceJars() {
+    return sourceJars;
   }
 
   /**
@@ -58,7 +95,8 @@ public class LibraryArtifact implements Serializable {
 
   @Override
   public String toString() {
-    return String.format("jar=%s, ijar=%s, srcjars=%s", classJar, interfaceJar, sourceJars);
+    return String.format(
+        "jar=%s, ijar=%s, srcjars=%s", getClassJar(), getInterfaceJar(), getSourceJars());
   }
 
   @Override
@@ -70,14 +108,14 @@ public class LibraryArtifact implements Serializable {
       return false;
     }
     LibraryArtifact that = (LibraryArtifact) o;
-    return Objects.equal(interfaceJar, that.interfaceJar)
-        && Objects.equal(classJar, that.classJar)
-        && Objects.equal(sourceJars, that.sourceJars);
+    return Objects.equal(getInterfaceJar(), that.getInterfaceJar())
+        && Objects.equal(getClassJar(), that.getClassJar())
+        && Objects.equal(getSourceJars(), that.getSourceJars());
   }
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(interfaceJar, classJar, sourceJars);
+    return Objects.hashCode(getInterfaceJar(), getClassJar(), getSourceJars());
   }
 
   public static Builder builder() {

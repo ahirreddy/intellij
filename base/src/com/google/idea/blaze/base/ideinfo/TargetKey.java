@@ -20,15 +20,14 @@ import com.google.common.base.Objects;
 import com.google.common.collect.ComparisonChain;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Ordering;
+import com.google.devtools.intellij.ideinfo.IntellijIdeInfo;
 import com.google.idea.blaze.base.model.primitives.Label;
-import java.io.Serializable;
 import java.util.List;
 
 /** A key that uniquely identifies a target in the target map */
-public class TargetKey implements Serializable, Comparable<TargetKey> {
-  private static final long serialVersionUID = 3L;
-
-  public final Label label;
+public final class TargetKey
+    implements ProtoWrapper<IntellijIdeInfo.TargetKey>, Comparable<TargetKey> {
+  private final Label label;
   private final ImmutableList<String> aspectIds;
 
   private TargetKey(Label label, ImmutableList<String> aspectIds) {
@@ -36,21 +35,41 @@ public class TargetKey implements Serializable, Comparable<TargetKey> {
     this.aspectIds = aspectIds;
   }
 
+  public static TargetKey fromProto(IntellijIdeInfo.TargetKey proto) {
+    return ProjectDataInterner.intern(
+        new TargetKey(
+            Label.fromProto(proto.getLabel()),
+            ProtoWrapper.internStrings(proto.getAspectIdsList())));
+  }
+
+  @Override
+  public IntellijIdeInfo.TargetKey toProto() {
+    return IntellijIdeInfo.TargetKey.newBuilder()
+        .setLabel(label.toProto())
+        .addAllAspectIds(aspectIds)
+        .build();
+  }
+
+  public Label getLabel() {
+    return label;
+  }
+
+  private ImmutableList<String> getAspectIds() {
+    return aspectIds;
+  }
+
   /** Returns a key identifying a plain target */
   public static TargetKey forPlainTarget(Label label) {
-    return new TargetKey(label, ImmutableList.of());
+    return forGeneralTarget(label, ImmutableList.of());
   }
 
   /** Returns a key identifying a general target */
   public static TargetKey forGeneralTarget(Label label, List<String> aspectIds) {
-    if (aspectIds.isEmpty()) {
-      return forPlainTarget(label);
-    }
-    return new TargetKey(label, ImmutableList.copyOf(aspectIds));
+    return ProjectDataInterner.intern(new TargetKey(label, ProtoWrapper.internStrings(aspectIds)));
   }
 
   public boolean isPlainTarget() {
-    return aspectIds.isEmpty();
+    return getAspectIds().isEmpty();
   }
 
   @Override
@@ -62,27 +81,28 @@ public class TargetKey implements Serializable, Comparable<TargetKey> {
       return false;
     }
     TargetKey key = (TargetKey) o;
-    return Objects.equal(label, key.label) && Objects.equal(aspectIds, key.aspectIds);
+    return Objects.equal(getLabel(), key.getLabel())
+        && Objects.equal(getAspectIds(), key.getAspectIds());
   }
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(label, aspectIds);
+    return Objects.hashCode(getLabel(), getAspectIds());
   }
 
   @Override
   public String toString() {
-    if (aspectIds.isEmpty()) {
-      return label.toString();
+    if (getAspectIds().isEmpty()) {
+      return getLabel().toString();
     }
-    return label.toString() + "#" + Joiner.on('#').join(aspectIds);
+    return getLabel().toString() + "#" + Joiner.on('#').join(getAspectIds());
   }
 
   @Override
   public int compareTo(TargetKey o) {
     return ComparisonChain.start()
-        .compare(label, o.label)
-        .compare(aspectIds, o.aspectIds, Ordering.natural().lexicographical())
+        .compare(getLabel(), o.getLabel())
+        .compare(getAspectIds(), o.getAspectIds(), Ordering.natural().lexicographical())
         .result();
   }
 }

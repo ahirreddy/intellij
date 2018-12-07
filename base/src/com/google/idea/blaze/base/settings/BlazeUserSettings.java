@@ -15,6 +15,8 @@
  */
 package com.google.idea.blaze.base.settings;
 
+import com.google.common.collect.ImmutableMap;
+import com.google.idea.blaze.base.logging.LoggedSettingsProvider;
 import com.intellij.openapi.components.PersistentStateComponent;
 import com.intellij.openapi.components.ServiceManager;
 import com.intellij.openapi.components.State;
@@ -28,12 +30,11 @@ import com.intellij.util.xmlb.XmlSerializerUtil;
 
 /** Stores blaze view settings. */
 @State(
-  name = "BlazeUserSettings",
-  storages = {
-    @Storage("blaze.user.settings.xml"),
-    @Storage(value = "blaze.view.xml", deprecated = true)
-  }
-)
+    name = "BlazeUserSettings",
+    storages = {
+      @Storage("blaze.user.settings.xml"),
+      @Storage(value = "blaze.view.xml", deprecated = true)
+    })
 public class BlazeUserSettings implements PersistentStateComponent<BlazeUserSettings> {
 
   /**
@@ -70,6 +71,7 @@ public class BlazeUserSettings implements PersistentStateComponent<BlazeUserSett
   @Deprecated private boolean suppressConsoleForRunAction = false;
   @Deprecated private boolean showProblemsViewForRunAction = false;
   private boolean resyncAutomatically = false;
+  private boolean resyncOnProtoChanges = false;
   private boolean syncStatusPopupShown = false;
   // DATABRICKS CHANGE: Expand sync false -> true
   private boolean expandSyncToWorkingSet = false;
@@ -108,8 +110,21 @@ public class BlazeUserSettings implements PersistentStateComponent<BlazeUserSett
     this.resyncAutomatically = resyncAutomatically;
   }
 
+  /**
+   * Whether we should re-sync on changes to BUILD and project view files.
+   *
+   * <p>TODO(brendandouglas): change name and migrate settings.
+   */
   public boolean getResyncAutomatically() {
     return resyncAutomatically;
+  }
+
+  public void setResyncOnProtoChanges(boolean resyncOnProtoChanges) {
+    this.resyncOnProtoChanges = resyncOnProtoChanges;
+  }
+
+  public boolean getResyncOnProtoChanges() {
+    return resyncOnProtoChanges;
   }
 
   public FocusBehavior getShowBlazeConsoleOnSync() {
@@ -212,6 +227,10 @@ public class BlazeUserSettings implements PersistentStateComponent<BlazeUserSett
     this.blazeBinaryPath = StringUtil.defaultIfEmpty(blazeBinaryPath, DEFAULT_BLAZE_PATH).trim();
   }
 
+  public boolean isDefaultBlazePath() {
+    return DEFAULT_BLAZE_PATH.equals(getBlazeBinaryPath());
+  }
+
   public String getBazelBinaryPath() {
     return StringUtil.defaultIfEmpty(bazelBinaryPath, DEFAULT_BAZEL_PATH).trim();
   }
@@ -247,6 +266,35 @@ public class BlazeUserSettings implements PersistentStateComponent<BlazeUserSett
     this.showAddFileToProjectNotification = showAddFileToProjectNotification;
     for (Project project : ProjectManager.getInstance().getOpenProjects()) {
       EditorNotifications.getInstance(project).updateAllNotifications();
+    }
+  }
+
+  static class SettingsLogger implements LoggedSettingsProvider {
+
+    @Override
+    public String getNamespace() {
+      return "BlazeUserSettings";
+    }
+
+    @Override
+    public ImmutableMap<String, String> getApplicationSettings() {
+      BlazeUserSettings settings = BlazeUserSettings.getInstance();
+
+      ImmutableMap.Builder<String, String> builder = ImmutableMap.builder();
+      builder.put("showBlazeConsoleOnSync", settings.showBlazeConsoleOnSync.name());
+      builder.put("showBlazeProblemsViewOnSync", settings.showBlazeProblemsViewOnSync.name());
+      builder.put("showBlazeConsoleOnRun", settings.showBlazeConsoleOnRun.name());
+      builder.put("showProblemsViewOnRun", settings.showProblemsViewOnRun.name());
+      builder.put("resyncAutomatically", Boolean.toString(settings.resyncAutomatically));
+      builder.put("resyncOnProtoChanges", Boolean.toString(settings.resyncOnProtoChanges));
+      builder.put("expandSyncToWorkingSet", Boolean.toString(settings.expandSyncToWorkingSet));
+      builder.put("formatBuildFilesOnSave", Boolean.toString(settings.formatBuildFilesOnSave));
+      builder.put(
+          "showAddFileToProjectNotification",
+          Boolean.toString(settings.showAddFileToProjectNotification));
+      builder.put("blazeBinaryPath", settings.blazeBinaryPath);
+      builder.put("bazelBinaryPath", settings.bazelBinaryPath);
+      return builder.build();
     }
   }
 }

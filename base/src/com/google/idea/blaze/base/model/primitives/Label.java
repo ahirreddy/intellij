@@ -15,6 +15,7 @@
  */
 package com.google.idea.blaze.base.model.primitives;
 
+import com.google.idea.blaze.base.ideinfo.ProjectDataInterner;
 import com.intellij.openapi.diagnostic.Logger;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.Immutable;
@@ -23,13 +24,13 @@ import javax.annotation.concurrent.Immutable;
 @Immutable
 public final class Label extends TargetExpression {
   private static final Logger logger = Logger.getInstance(Label.class);
-
+  // still Serializable as part of ProjectViewSet
   public static final long serialVersionUID = 2L;
 
   /** Silently returns null if this is not a valid Label */
   @Nullable
   public static Label createIfValid(String label) {
-    return validate(label) == null ? new Label(label) : null;
+    return validate(label) == null ? ProjectDataInterner.intern(new Label(label)) : null;
   }
 
   public static Label create(String label) {
@@ -37,7 +38,7 @@ public final class Label extends TargetExpression {
     if (error != null) {
       throw new IllegalArgumentException(error);
     }
-    return new Label(label);
+    return ProjectDataInterner.intern(new Label(label));
   }
 
   public static Label create(WorkspacePath packageName, TargetName newTargetName) {
@@ -52,7 +53,7 @@ public final class Label extends TargetExpression {
             externalWorkspaceName != null ? "@" + externalWorkspaceName : "",
             packagePath,
             targetName);
-    return new Label(fullLabel);
+    return ProjectDataInterner.intern(new Label(fullLabel));
   }
 
   private Label(String label) {
@@ -143,5 +144,9 @@ public final class Label extends TargetExpression {
   @Nullable
   public static String validatePackagePath(String path) {
     return PackagePathValidator.validatePackageName(path);
+  }
+
+  public static Label fromProto(String proto) {
+    return ProjectDataInterner.intern(new Label(proto));
   }
 }

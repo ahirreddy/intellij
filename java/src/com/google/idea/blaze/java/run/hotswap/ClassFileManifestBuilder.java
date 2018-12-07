@@ -15,13 +15,15 @@
  */
 package com.google.idea.blaze.java.run.hotswap;
 
-import static com.google.idea.common.guava.GuavaHelper.toImmutableList;
+import static com.google.common.collect.ImmutableList.toImmutableList;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.idea.blaze.base.command.BlazeInvocationContext;
 import com.google.idea.blaze.base.command.buildresult.BuildResultHelper;
+import com.google.idea.blaze.base.command.buildresult.BuildResultHelper.GetArtifactsException;
+import com.google.idea.blaze.base.command.buildresult.BuildResultHelperProvider;
 import com.google.idea.blaze.base.model.BlazeProjectData;
 import com.google.idea.blaze.base.run.BlazeBeforeRunCommandHelper;
 import com.google.idea.blaze.base.run.BlazeCommandRunConfiguration;
@@ -51,7 +53,10 @@ public class ClassFileManifestBuilder {
 
   /** Called when initializing our run profile state, to support hotswapping. */
   public static void initState(ExecutionEnvironment env) {
-    if (HotSwapUtils.canHotSwap(env)) {
+    if (!HotSwapUtils.canHotSwap(env)) {
+      return;
+    }
+    if (env.getCopyableUserData(MANIFEST_KEY) == null) {
       env.putCopyableUserData(MANIFEST_KEY, new AtomicReference<>());
     }
   }
@@ -83,12 +88,13 @@ public class ClassFileManifestBuilder {
       throw new ExecutionException("Not synced yet; please sync project");
     }
     JavaClasspathAspectStrategy aspectStrategy =
-        JavaClasspathAspectStrategy.findStrategy(projectData.blazeVersionData);
+        JavaClasspathAspectStrategy.findStrategy(projectData.getBlazeVersionData());
     if (aspectStrategy == null) {
       return null;
     }
 
-    try (BuildResultHelper buildResultHelper = BuildResultHelper.forFiles(file -> true)) {
+    try (BuildResultHelper buildResultHelper =
+        BuildResultHelperProvider.forFiles(project, file -> true)) {
 
       ListenableFuture<BuildResult> buildOperation =
           BlazeBeforeRunCommandHelper.runBlazeBuild(
@@ -115,13 +121,18 @@ public class ClassFileManifestBuilder {
       } catch (java.util.concurrent.ExecutionException e) {
         throw new ExecutionException(e);
       }
-      ImmutableList<File> jars =
-          buildResultHelper
-              .getArtifactsForOutputGroups(
-                  ImmutableSet.of(JavaClasspathAspectStrategy.OUTPUT_GROUP))
-              .stream()
-              .filter(f -> f.getName().endsWith(".jar"))
-              .collect(toImmutableList());
+      ImmutableList<File> jars;
+      try {
+        jars =
+            buildResultHelper
+                .getArtifactsForOutputGroups(
+                    ImmutableSet.of(JavaClasspathAspectStrategy.OUTPUT_GROUP))
+                .stream()
+                .filter(f -> f.getName().endsWith(".jar"))
+                .collect(toImmutableList());
+      } catch (GetArtifactsException e) {
+        throw new ExecutionException("Failed to get debug binary: " + e.getMessage());
+      }
       ClassFileManifest oldManifest = getManifest(env);
       ClassFileManifest newManifest = ClassFileManifest.build(jars, oldManifest);
       env.getCopyableUserData(MANIFEST_KEY).set(newManifest);

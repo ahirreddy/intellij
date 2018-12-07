@@ -17,12 +17,11 @@ package com.google.idea.blaze.java.run.producers;
 
 import com.google.common.collect.ImmutableList;
 import com.google.idea.blaze.base.settings.Blaze;
-import com.google.idea.sdkcompat.java.JavaConfigurationProducerList;
 import com.intellij.execution.RunConfigurationProducerService;
 import com.intellij.execution.actions.RunConfigurationProducer;
 import com.intellij.ide.plugins.IdeaPluginDescriptor;
 import com.intellij.ide.plugins.PluginManager;
-import com.intellij.openapi.components.AbstractProjectComponent;
+import com.intellij.openapi.components.ProjectComponent;
 import com.intellij.openapi.extensions.PluginId;
 import com.intellij.openapi.project.Project;
 import java.util.Collection;
@@ -31,7 +30,7 @@ import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
 /** Suppresses certain non-Blaze configuration producers in Blaze projects. */
-public class NonBlazeProducerSuppressor extends AbstractProjectComponent {
+public class NonBlazeProducerSuppressor implements ProjectComponent {
 
   private static final String KOTLIN_PLUGIN_ID = "org.jetbrains.kotlin";
   private static final String ANDROID_PLUGIN_ID = "org.jetbrains.android";
@@ -51,6 +50,16 @@ public class NonBlazeProducerSuppressor extends AbstractProjectComponent {
           "com.android.tools.idea.testartifacts.junit.TestMethodAndroidConfigurationProducer",
           "com.android.tools.idea.testartifacts.junit.TestPackageAndroidConfigurationProducer",
           "com.android.tools.idea.testartifacts.junit.TestPatternConfigurationProducer");
+
+  private static final ImmutableList<Class<? extends RunConfigurationProducer<?>>> JAVA_PRODUCERS =
+      ImmutableList.of(
+          com.intellij.execution.junit.AllInDirectoryConfigurationProducer.class,
+          com.intellij.execution.junit.AllInPackageConfigurationProducer.class,
+          com.intellij.execution.junit.TestInClassConfigurationProducer.class,
+          com.intellij.execution.junit.TestClassConfigurationProducer.class,
+          com.intellij.execution.junit.TestMethodConfigurationProducer.class,
+          com.intellij.execution.junit.PatternConfigurationProducer.class,
+          com.intellij.execution.application.ApplicationConfigurationProducer.class);
 
   private static Collection<Class<? extends RunConfigurationProducer<?>>> getProducers(
       String pluginId, Collection<String> qualifiedClassNames) {
@@ -82,14 +91,16 @@ public class NonBlazeProducerSuppressor extends AbstractProjectComponent {
     }
   }
 
+  private final Project project;
+
   public NonBlazeProducerSuppressor(Project project) {
-    super(project);
+    this.project = project;
   }
 
   @Override
   public void projectOpened() {
-    if (Blaze.isBlazeProject(myProject)) {
-      suppressProducers(myProject);
+    if (Blaze.isBlazeProject(project)) {
+      suppressProducers(project);
     }
   }
 
@@ -97,7 +108,7 @@ public class NonBlazeProducerSuppressor extends AbstractProjectComponent {
     RunConfigurationProducerService producerService =
         RunConfigurationProducerService.getInstance(project);
     ImmutableList.<Class<? extends RunConfigurationProducer<?>>>builder()
-        .addAll(JavaConfigurationProducerList.PRODUCERS_TO_SUPPRESS)
+        .addAll(JAVA_PRODUCERS)
         .addAll(getProducers(KOTLIN_PLUGIN_ID, KOTLIN_PRODUCERS))
         .addAll(getProducers(ANDROID_PLUGIN_ID, ANDROID_PRODUCERS))
         .build()

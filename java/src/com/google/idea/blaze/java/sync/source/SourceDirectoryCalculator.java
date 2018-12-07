@@ -50,7 +50,6 @@ import com.intellij.openapi.diagnostic.Logger;
 import com.intellij.openapi.project.Project;
 import java.io.File;
 import java.util.Collection;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
@@ -132,9 +131,7 @@ public final class SourceDirectoryCalculator {
                     workspacePath,
                     sourcesUnderDirectoryRoot.get(workspacePath),
                     javaPackageReaders);
-            if (!sourceDirectories.isEmpty()) {
-              result.add(new BlazeContentEntry(contentRoot, sourceDirectories));
-            }
+            result.add(new BlazeContentEntry(contentRoot, sourceDirectories));
           }
           result.sort(Comparator.comparing(lhs -> lhs.contentRoot));
         });
@@ -143,8 +140,7 @@ public final class SourceDirectoryCalculator {
 
   private Collection<SourceArtifact> filterGeneratedArtifacts(
       Collection<SourceArtifact> artifactLocations) {
-    return artifactLocations
-        .stream()
+    return artifactLocations.stream()
         .filter(sourceArtifact -> sourceArtifact.artifactLocation.isSource())
         .collect(Collectors.toList());
   }
@@ -156,16 +152,12 @@ public final class SourceDirectoryCalculator {
 
     for (SourceArtifact sourceArtifact : sources) {
       String sourcePath = sourceArtifact.artifactLocation.getRelativePath();
-      if (importRoots
-          .excludeDirectories()
-          .stream()
+      if (importRoots.excludeDirectories().stream()
           .anyMatch(excluded -> isUnderRootDirectory(excluded, sourcePath))) {
         continue;
       }
       WorkspacePath foundWorkspacePath =
-          importRoots
-              .rootDirectories()
-              .stream()
+          importRoots.rootDirectories().stream()
               .filter(rootDirectory -> isUnderRootDirectory(rootDirectory, sourcePath))
               .findFirst()
               .orElse(null);
@@ -225,7 +217,17 @@ public final class SourceDirectoryCalculator {
         javaPackageReaders,
         result);
 
-    Collections.sort(result, BlazeSourceDirectory.COMPARATOR);
+    if (result.isEmpty() && PackagePrefixCalculator.looksLikeSourceRoot(directoryRoot)) {
+      // if this really looks like a source root, but we didn't find any sources
+      // then call it a root and guess the package path anyway
+      return ImmutableList.of(
+          BlazeSourceDirectory.builder(workspaceRoot.fileForPath(directoryRoot))
+              .setPackagePrefix(PackagePrefixCalculator.packagePrefixOf(directoryRoot))
+              .setGenerated(false)
+              .build());
+    }
+
+    result.sort(BlazeSourceDirectory.COMPARATOR);
     return ImmutableList.copyOf(result);
   }
 
@@ -291,13 +293,6 @@ public final class SourceDirectoryCalculator {
 
       SourceRoot candidateRoot = new SourceRoot(workspacePath, directoryPackagePrefix);
       workspacePathToSourceRoot.put(workspacePath, candidateRoot);
-    }
-
-    // Add content entry base if it doesn't exist
-    if (!workspacePathToSourceRoot.containsKey(directoryRoot)) {
-      SourceRoot candidateRoot =
-          new SourceRoot(directoryRoot, PackagePrefixCalculator.packagePrefixOf(directoryRoot));
-      workspacePathToSourceRoot.put(directoryRoot, candidateRoot);
     }
 
     // First, create a graph of the directory structure from root to each source file
@@ -474,7 +469,7 @@ public final class SourceDirectoryCalculator {
           .submit(context);
       return null;
     }
-    String parentPath = new File(sourceArtifact.artifactLocation.relativePath).getParent();
+    String parentPath = new File(sourceArtifact.artifactLocation.getRelativePath()).getParent();
     return new SourceRoot(new WorkspacePath(Strings.nullToEmpty(parentPath)), declaredPackage);
   }
 
@@ -482,7 +477,7 @@ public final class SourceDirectoryCalculator {
     final WorkspacePath workspacePath;
     final String packagePrefix;
 
-    public SourceRoot(WorkspacePath workspacePath, String packagePrefix) {
+    SourceRoot(WorkspacePath workspacePath, String packagePrefix) {
       this.workspacePath = workspacePath;
       this.packagePrefix = packagePrefix;
     }
@@ -523,7 +518,7 @@ public final class SourceDirectoryCalculator {
     final Multiset<String> packagePrefixVotes = HashMultiset.create();
     String forcedPackagePrefix;
 
-    public SourceRootDirectoryNode(WorkspacePath workspacePath, @Nullable String directoryName) {
+    SourceRootDirectoryNode(WorkspacePath workspacePath, @Nullable String directoryName) {
       this.workspacePath = workspacePath;
       this.directoryName = directoryName;
     }

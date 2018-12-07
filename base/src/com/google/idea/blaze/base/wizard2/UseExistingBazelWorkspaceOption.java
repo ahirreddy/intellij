@@ -64,7 +64,7 @@ public class UseExistingBazelWorkspaceOption implements TopLevelSelectWorkspaceO
     canvas.add(new JSeparator());
 
     JPanel content = new JPanel(new VerticalLayout(12));
-    content.setBorder(Borders.empty(20, 100, 0, 0));
+    content.setBorder(Borders.empty(20, 20, 0, 0));
 
     JComponent box =
         UiUtil.createHorizontalBox(
@@ -86,11 +86,6 @@ public class UseExistingBazelWorkspaceOption implements TopLevelSelectWorkspaceO
   @Override
   public String getOptionName() {
     return "use-existing-bazel-workspace";
-  }
-
-  @Override
-  public boolean migratePreviousOptions(BlazeWizardUserSettings userSettings) {
-    return false;
   }
 
   @Override
@@ -150,6 +145,8 @@ public class UseExistingBazelWorkspaceOption implements TopLevelSelectWorkspaceO
             .withTitle("Select Workspace Root")
             .withDescription("Select the directory of the workspace you want to use.")
             .withFileFilter(UseExistingBazelWorkspaceOption::isWorkspaceRoot);
+    // File filters are broken for the native Mac file chooser.
+    descriptor.setForcedToUseIdeaFileChooser(true);
     FileChooserDialog chooser =
         FileChooserFactory.getInstance().createFileChooser(descriptor, null, null);
 

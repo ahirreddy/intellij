@@ -1,7 +1,17 @@
 """Custom build macros for IntelliJ plugin handling.
 """
 
-load(":intellij_plugin.bzl", "intellij_plugin", "optional_plugin_xml")
+load(
+    ":intellij_plugin.bzl",
+    _intellij_plugin = "intellij_plugin",
+    _intellij_plugin_library = "intellij_plugin_library",
+    _optional_plugin_xml = "optional_plugin_xml",
+)
+
+# Re-export these symbols
+intellij_plugin = _intellij_plugin
+intellij_plugin_library = _intellij_plugin_library
+optional_plugin_xml = _optional_plugin_xml
 
 def merged_plugin_xml(name, srcs, **kwargs):
     """Merges N plugin.xml files together."""
@@ -279,7 +289,7 @@ def _plugin_deploy_zip_impl(ctx):
     ctx.action(
         executable = ctx.executable._zip_plugin_files,
         arguments = args,
-        inputs = list(input_files),
+        inputs = input_files.to_list(),
         outputs = [zip_file],
         mnemonic = "ZipPluginFiles",
         progress_message = "Creating final plugin zip archive",

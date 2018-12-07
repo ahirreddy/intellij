@@ -17,40 +17,69 @@ package com.google.idea.blaze.base.ideinfo;
 
 import com.google.common.base.Objects;
 import com.google.common.collect.ImmutableList;
+import com.google.devtools.intellij.ideinfo.IntellijIdeInfo;
 import com.google.idea.blaze.base.model.primitives.ExecutionRootPath;
-import java.io.Serializable;
 
-/** Represents a cc_toolchain */
-public class CToolchainIdeInfo implements Serializable {
-  private static final long serialVersionUID = 4L;
+/** Represents toolchain info from a cc_toolchain or cc_toolchain_suite */
+public final class CToolchainIdeInfo implements ProtoWrapper<IntellijIdeInfo.CToolchainIdeInfo> {
 
-  public final ImmutableList<String> baseCompilerOptions;
-  public final ImmutableList<String> cCompilerOptions;
-  public final ImmutableList<String> cppCompilerOptions;
-  public final ImmutableList<ExecutionRootPath> builtInIncludeDirectories;
-  public final ExecutionRootPath cppExecutable;
-  public final String targetName;
+  private final ImmutableList<String> cCompilerOptions;
+  private final ImmutableList<String> cppCompilerOptions;
+  private final ImmutableList<ExecutionRootPath> builtInIncludeDirectories;
+  private final ExecutionRootPath cppExecutable;
+  private final String targetName;
 
-  public final ImmutableList<String> unfilteredCompilerOptions;
-  public final ImmutableList<ExecutionRootPath> unfilteredToolchainSystemIncludes;
-
-  public CToolchainIdeInfo(
-      ImmutableList<String> baseCompilerOptions,
+  private CToolchainIdeInfo(
       ImmutableList<String> cCompilerOptions,
       ImmutableList<String> cppCompilerOptions,
       ImmutableList<ExecutionRootPath> builtInIncludeDirectories,
       ExecutionRootPath cppExecutable,
-      String targetName,
-      ImmutableList<String> unfilteredCompilerOptions,
-      ImmutableList<ExecutionRootPath> unfilteredToolchainSystemIncludes) {
-    this.baseCompilerOptions = baseCompilerOptions;
+      String targetName) {
     this.cCompilerOptions = cCompilerOptions;
     this.cppCompilerOptions = cppCompilerOptions;
     this.builtInIncludeDirectories = builtInIncludeDirectories;
     this.cppExecutable = cppExecutable;
     this.targetName = targetName;
-    this.unfilteredCompilerOptions = unfilteredCompilerOptions;
-    this.unfilteredToolchainSystemIncludes = unfilteredToolchainSystemIncludes;
+  }
+
+  static CToolchainIdeInfo fromProto(IntellijIdeInfo.CToolchainIdeInfo proto) {
+    return new CToolchainIdeInfo(
+        ImmutableList.copyOf(proto.getCOptionList()),
+        ImmutableList.copyOf(proto.getCppOptionList()),
+        ProtoWrapper.map(proto.getBuiltInIncludeDirectoryList(), ExecutionRootPath::fromProto),
+        ExecutionRootPath.fromProto(proto.getCppExecutable()),
+        proto.getTargetName());
+  }
+
+  @Override
+  public IntellijIdeInfo.CToolchainIdeInfo toProto() {
+    return IntellijIdeInfo.CToolchainIdeInfo.newBuilder()
+        .addAllCOption(cCompilerOptions)
+        .addAllCppOption(cppCompilerOptions)
+        .addAllBuiltInIncludeDirectory(ProtoWrapper.mapToProtos(builtInIncludeDirectories))
+        .setCppExecutable(cppExecutable.toProto())
+        .setTargetName(targetName)
+        .build();
+  }
+
+  public ImmutableList<String> getcCompilerOptions() {
+    return cCompilerOptions;
+  }
+
+  public ImmutableList<String> getCppCompilerOptions() {
+    return cppCompilerOptions;
+  }
+
+  public ImmutableList<ExecutionRootPath> getBuiltInIncludeDirectories() {
+    return builtInIncludeDirectories;
+  }
+
+  public ExecutionRootPath getCppExecutable() {
+    return cppExecutable;
+  }
+
+  public String getTargetName() {
+    return targetName;
   }
 
   public static Builder builder() {
@@ -59,7 +88,6 @@ public class CToolchainIdeInfo implements Serializable {
 
   /** Builder for c toolchain */
   public static class Builder {
-    private final ImmutableList.Builder<String> baseCompilerOptions = ImmutableList.builder();
     private final ImmutableList.Builder<String> cCompilerOptions = ImmutableList.builder();
     private final ImmutableList.Builder<String> cppCompilerOptions = ImmutableList.builder();
 
@@ -69,15 +97,6 @@ public class CToolchainIdeInfo implements Serializable {
     ExecutionRootPath cppExecutable;
 
     String targetName = "";
-
-    private final ImmutableList.Builder<String> unfilteredCompilerOptions = ImmutableList.builder();
-    private final ImmutableList.Builder<ExecutionRootPath> unfilteredToolchainSystemIncludes =
-        ImmutableList.builder();
-
-    public Builder addBaseCompilerOptions(Iterable<String> baseCompilerOptions) {
-      this.baseCompilerOptions.addAll(baseCompilerOptions);
-      return this;
-    }
 
     public Builder addCCompilerOptions(Iterable<String> cCompilerOptions) {
       this.cCompilerOptions.addAll(cCompilerOptions);
@@ -105,27 +124,13 @@ public class CToolchainIdeInfo implements Serializable {
       return this;
     }
 
-    public Builder addUnfilteredCompilerOptions(Iterable<String> unfilteredCompilerOptions) {
-      this.unfilteredCompilerOptions.addAll(unfilteredCompilerOptions);
-      return this;
-    }
-
-    public Builder addUnfilteredToolchainSystemIncludes(
-        Iterable<ExecutionRootPath> unfilteredToolchainSystemIncludes) {
-      this.unfilteredToolchainSystemIncludes.addAll(unfilteredToolchainSystemIncludes);
-      return this;
-    }
-
     public CToolchainIdeInfo build() {
       return new CToolchainIdeInfo(
-          baseCompilerOptions.build(),
           cCompilerOptions.build(),
           cppCompilerOptions.build(),
           builtInIncludeDirectories.build(),
           cppExecutable,
-          targetName,
-          unfilteredCompilerOptions.build(),
-          unfilteredToolchainSystemIncludes.build());
+          targetName);
     }
   }
 
@@ -133,31 +138,22 @@ public class CToolchainIdeInfo implements Serializable {
   public String toString() {
     return "CToolchainIdeInfo{"
         + "\n"
-        + "  baseCompilerOptions="
-        + baseCompilerOptions
-        + "\n"
         + "  cCompilerOptions="
-        + cCompilerOptions
+        + getcCompilerOptions()
         + "\n"
         + "  cppCompilerOptions="
-        + cppCompilerOptions
+        + getCppCompilerOptions()
         + "\n"
         + "  builtInIncludeDirectories="
-        + builtInIncludeDirectories
+        + getBuiltInIncludeDirectories()
         + "\n"
         + "  cppExecutable='"
-        + cppExecutable
+        + getCppExecutable()
         + '\''
         + "\n"
         + "  targetName='"
-        + targetName
+        + getTargetName()
         + '\''
-        + "\n"
-        + "  unfilteredCompilerOptions="
-        + unfilteredCompilerOptions
-        + "\n"
-        + "  unfilteredToolchainSystemIncludes="
-        + unfilteredToolchainSystemIncludes
         + "\n"
         + '}';
   }
@@ -171,26 +167,20 @@ public class CToolchainIdeInfo implements Serializable {
       return false;
     }
     CToolchainIdeInfo that = (CToolchainIdeInfo) o;
-    return Objects.equal(baseCompilerOptions, that.baseCompilerOptions)
-        && Objects.equal(cCompilerOptions, that.cCompilerOptions)
-        && Objects.equal(cppCompilerOptions, that.cppCompilerOptions)
-        && Objects.equal(builtInIncludeDirectories, that.builtInIncludeDirectories)
-        && Objects.equal(cppExecutable, that.cppExecutable)
-        && Objects.equal(targetName, that.targetName)
-        && Objects.equal(unfilteredCompilerOptions, that.unfilteredCompilerOptions)
-        && Objects.equal(unfilteredToolchainSystemIncludes, that.unfilteredToolchainSystemIncludes);
+    return Objects.equal(getcCompilerOptions(), that.getcCompilerOptions())
+        && Objects.equal(getCppCompilerOptions(), that.getCppCompilerOptions())
+        && Objects.equal(getBuiltInIncludeDirectories(), that.getBuiltInIncludeDirectories())
+        && Objects.equal(getCppExecutable(), that.getCppExecutable())
+        && Objects.equal(getTargetName(), that.getTargetName());
   }
 
   @Override
   public int hashCode() {
     return Objects.hashCode(
-        baseCompilerOptions,
-        cCompilerOptions,
-        cppCompilerOptions,
-        builtInIncludeDirectories,
-        cppExecutable,
-        targetName,
-        unfilteredCompilerOptions,
-        unfilteredToolchainSystemIncludes);
+        getcCompilerOptions(),
+        getCppCompilerOptions(),
+        getBuiltInIncludeDirectories(),
+        getCppExecutable(),
+        getTargetName());
   }
 }

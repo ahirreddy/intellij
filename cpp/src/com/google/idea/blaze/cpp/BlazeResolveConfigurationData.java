@@ -23,7 +23,6 @@ import com.google.idea.blaze.base.ideinfo.CIdeInfo;
 import com.google.idea.blaze.base.ideinfo.CToolchainIdeInfo;
 import com.google.idea.blaze.base.model.primitives.ExecutionRootPath;
 import com.google.idea.blaze.base.sync.workspace.ExecutionRootPathResolver;
-import com.google.idea.sdkcompat.cidr.CompilerInfoCacheAdapter;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.jetbrains.cidr.lang.workspace.headerRoots.HeadersSearchRoot;
@@ -39,8 +38,9 @@ final class BlazeResolveConfigurationData {
   final ImmutableList<HeadersSearchRoot> cLibraryIncludeRoots;
   final ImmutableList<HeadersSearchRoot> cppLibraryIncludeRoots;
   final ImmutableList<HeadersSearchRoot> projectIncludeRoots;
-  final BlazeCompilerMacros compilerMacros;
-  final CToolchainIdeInfo toolchainIdeInfo;
+  final ImmutableCollection<String> defines;
+  final ImmutableList<String> targetCopts;
+  private final CToolchainIdeInfo toolchainIdeInfo;
 
   static BlazeResolveConfigurationData create(
       Project project,
@@ -48,25 +48,19 @@ final class BlazeResolveConfigurationData {
       ImmutableMap<File, VirtualFile> headerRoots,
       CIdeInfo cIdeInfo,
       CToolchainIdeInfo toolchainIdeInfo,
-      BlazeCompilerSettings compilerSettings,
-      CompilerInfoCacheAdapter compilerInfoCache) {
+      BlazeCompilerSettings compilerSettings) {
     ImmutableSet.Builder<ExecutionRootPath> systemIncludesBuilder = ImmutableSet.builder();
-    systemIncludesBuilder.addAll(cIdeInfo.transitiveSystemIncludeDirectories);
-    systemIncludesBuilder.addAll(toolchainIdeInfo.builtInIncludeDirectories);
-    systemIncludesBuilder.addAll(toolchainIdeInfo.unfilteredToolchainSystemIncludes);
+    systemIncludesBuilder.addAll(cIdeInfo.getTransitiveSystemIncludeDirectories());
+    systemIncludesBuilder.addAll(toolchainIdeInfo.getBuiltInIncludeDirectories());
 
     ImmutableSet.Builder<ExecutionRootPath> userIncludesBuilder = ImmutableSet.builder();
-    userIncludesBuilder.addAll(cIdeInfo.transitiveIncludeDirectories);
-    userIncludesBuilder.addAll(cIdeInfo.localIncludeDirectories);
+    userIncludesBuilder.addAll(cIdeInfo.getTransitiveIncludeDirectories());
 
     ImmutableSet.Builder<ExecutionRootPath> userQuoteIncludesBuilder = ImmutableSet.builder();
-    userQuoteIncludesBuilder.addAll(cIdeInfo.transitiveQuoteIncludeDirectories);
+    userQuoteIncludesBuilder.addAll(cIdeInfo.getTransitiveQuoteIncludeDirectories());
 
     ImmutableList.Builder<String> defines = ImmutableList.builder();
-    defines.addAll(cIdeInfo.transitiveDefines);
-    defines.addAll(cIdeInfo.localDefines);
-
-    ImmutableMap<String, String> features = ImmutableMap.of();
+    defines.addAll(cIdeInfo.getTransitiveDefines());
 
     return new BlazeResolveConfigurationData(
         project,
@@ -78,9 +72,8 @@ final class BlazeResolveConfigurationData {
         userIncludesBuilder.build(),
         userIncludesBuilder.build(),
         defines.build(),
-        features,
         compilerSettings,
-        compilerInfoCache,
+        cIdeInfo.getLocalCopts(),
         toolchainIdeInfo);
   }
 
@@ -94,9 +87,8 @@ final class BlazeResolveConfigurationData {
       ImmutableCollection<ExecutionRootPath> cIncludeDirs,
       ImmutableCollection<ExecutionRootPath> cppIncludeDirs,
       ImmutableCollection<String> defines,
-      ImmutableMap<String, String> features,
       BlazeCompilerSettings compilerSettings,
-      CompilerInfoCacheAdapter compilerInfoCache,
+      ImmutableList<String> targetCopts,
       CToolchainIdeInfo toolchainIdeInfo) {
     this.toolchainIdeInfo = toolchainIdeInfo;
 
@@ -122,8 +114,8 @@ final class BlazeResolveConfigurationData {
     this.projectIncludeRoots = quoteIncludeRootsBuilder.build();
 
     this.compilerSettings = compilerSettings;
-    this.compilerMacros =
-        new BlazeCompilerMacros(project, compilerInfoCache, compilerSettings, defines, features);
+    this.defines = defines;
+    this.targetCopts = targetCopts;
   }
 
   @Override
@@ -138,7 +130,8 @@ final class BlazeResolveConfigurationData {
     return this.cLibraryIncludeRoots.equals(otherData.cLibraryIncludeRoots)
         && this.cppLibraryIncludeRoots.equals(otherData.cppLibraryIncludeRoots)
         && this.projectIncludeRoots.equals(otherData.projectIncludeRoots)
-        && this.compilerMacros.equals(otherData.compilerMacros)
+        && this.targetCopts.equals(otherData.targetCopts)
+        && this.defines.equals(otherData.defines)
         && this.toolchainIdeInfo.equals(otherData.toolchainIdeInfo)
         && this.compilerSettings
             .getCompilerVersion()
@@ -151,7 +144,8 @@ final class BlazeResolveConfigurationData {
         cLibraryIncludeRoots,
         cppLibraryIncludeRoots,
         projectIncludeRoots,
-        compilerMacros,
+        targetCopts,
+        defines,
         toolchainIdeInfo,
         compilerSettings.getCompilerVersion());
   }

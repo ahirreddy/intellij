@@ -16,19 +16,41 @@
 package com.google.idea.blaze.base.ideinfo;
 
 import com.google.common.collect.ImmutableList;
+import com.google.devtools.intellij.ideinfo.IntellijIdeInfo;
 import com.google.idea.blaze.base.model.primitives.Label;
-import java.io.Serializable;
+import java.util.Objects;
 
 /** Kotlin toolchain information. */
-public class KotlinToolchainIdeInfo implements Serializable {
-  private static final long serialVersionUID = 1L;
+public final class KotlinToolchainIdeInfo
+    implements ProtoWrapper<IntellijIdeInfo.KotlinToolchainIdeInfo> {
+  private final String languageVersion;
+  private final ImmutableList<Label> sdkTargets;
 
-  public final String languageVersion;
-  public final ImmutableList<Label> sdkTargets;
-
-  public KotlinToolchainIdeInfo(String languageVersion, ImmutableList<Label> sdkTargets) {
+  private KotlinToolchainIdeInfo(String languageVersion, ImmutableList<Label> sdkTargets) {
     this.languageVersion = languageVersion;
     this.sdkTargets = sdkTargets;
+  }
+
+  static KotlinToolchainIdeInfo fromProto(IntellijIdeInfo.KotlinToolchainIdeInfo proto) {
+    return new KotlinToolchainIdeInfo(
+        proto.getLanguageVersion(),
+        ProtoWrapper.map(proto.getSdkLibraryTargetsList(), Label::fromProto));
+  }
+
+  @Override
+  public IntellijIdeInfo.KotlinToolchainIdeInfo toProto() {
+    return IntellijIdeInfo.KotlinToolchainIdeInfo.newBuilder()
+        .setLanguageVersion(languageVersion)
+        .addAllSdkLibraryTargets(ProtoWrapper.mapToProtos(sdkTargets))
+        .build();
+  }
+
+  public String getLanguageVersion() {
+    return languageVersion;
+  }
+
+  public ImmutableList<Label> getSdkTargets() {
+    return sdkTargets;
   }
 
   @Override
@@ -36,12 +58,30 @@ public class KotlinToolchainIdeInfo implements Serializable {
     return "KotlinToolchainIdeInfo{"
         + "\n"
         + "  languageVersion="
-        + languageVersion
+        + getLanguageVersion()
         + "\n"
         + "  sdkTargets="
-        + sdkTargets
+        + getSdkTargets()
         + "\n"
         + '}';
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    KotlinToolchainIdeInfo that = (KotlinToolchainIdeInfo) o;
+    return Objects.equals(languageVersion, that.languageVersion)
+        && Objects.equals(sdkTargets, that.sdkTargets);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(languageVersion, sdkTargets);
   }
 
   public static KotlinToolchainIdeInfo.Builder builder() {

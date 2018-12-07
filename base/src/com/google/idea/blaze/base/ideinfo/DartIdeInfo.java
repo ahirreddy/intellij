@@ -16,16 +16,30 @@
 package com.google.idea.blaze.base.ideinfo;
 
 import com.google.common.collect.ImmutableList;
-import java.io.Serializable;
+import com.google.devtools.intellij.ideinfo.IntellijIdeInfo;
+import java.util.Objects;
 
 /** Ide info specific to dart rules. */
-public class DartIdeInfo implements Serializable {
-  private static final long serialVersionUID = 1L;
+public final class DartIdeInfo implements ProtoWrapper<IntellijIdeInfo.DartIdeInfo> {
+  private final ImmutableList<ArtifactLocation> sources;
 
-  public final ImmutableList<ArtifactLocation> sources;
-
-  public DartIdeInfo(ImmutableList<ArtifactLocation> sources) {
+  private DartIdeInfo(ImmutableList<ArtifactLocation> sources) {
     this.sources = sources;
+  }
+
+  static DartIdeInfo fromProto(IntellijIdeInfo.DartIdeInfo proto) {
+    return new DartIdeInfo(ProtoWrapper.map(proto.getSourcesList(), ArtifactLocation::fromProto));
+  }
+
+  @Override
+  public IntellijIdeInfo.DartIdeInfo toProto() {
+    return IntellijIdeInfo.DartIdeInfo.newBuilder()
+        .addAllSources(ProtoWrapper.mapToProtos(sources))
+        .build();
+  }
+
+  public ImmutableList<ArtifactLocation> getSources() {
+    return sources;
   }
 
   public static Builder builder() {
@@ -48,6 +62,23 @@ public class DartIdeInfo implements Serializable {
 
   @Override
   public String toString() {
-    return "DartIdeInfo{" + "\n" + "  sources=" + sources + "\n" + '}';
+    return "DartIdeInfo{" + "\n" + "  sources=" + getSources() + "\n" + '}';
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    DartIdeInfo that = (DartIdeInfo) o;
+    return Objects.equals(sources, that.sources);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(sources);
   }
 }

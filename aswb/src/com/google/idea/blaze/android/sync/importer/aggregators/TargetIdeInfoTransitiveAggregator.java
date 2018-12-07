@@ -17,10 +17,13 @@ package com.google.idea.blaze.android.sync.importer.aggregators;
 
 import static java.util.stream.Collectors.toList;
 
-import com.google.idea.blaze.base.ideinfo.Dependency.DependencyType;
+import com.google.devtools.intellij.ideinfo.IntellijIdeInfo.Dependency.DependencyType;
+import com.google.idea.blaze.base.ideinfo.Dependency;
 import com.google.idea.blaze.base.ideinfo.TargetIdeInfo;
 import com.google.idea.blaze.base.ideinfo.TargetKey;
 import com.google.idea.blaze.base.ideinfo.TargetMap;
+import java.util.List;
+import org.jetbrains.annotations.NotNull;
 
 /** Transitive aggregator for TargetIdeInfo. */
 public abstract class TargetIdeInfoTransitiveAggregator<T> extends TransitiveAggregator<T> {
@@ -30,11 +33,14 @@ public abstract class TargetIdeInfoTransitiveAggregator<T> extends TransitiveAgg
 
   @Override
   protected Iterable<TargetKey> getDependencies(TargetIdeInfo target) {
-    return target
-        .dependencies
-        .stream()
-        .filter(dep -> dep.dependencyType == DependencyType.COMPILE_TIME)
-        .map(dep -> dep.targetKey)
+    return getCompileDependencies(target);
+  }
+
+  @NotNull
+  public static List<TargetKey> getCompileDependencies(TargetIdeInfo target) {
+    return target.getDependencies().stream()
+        .filter(dep -> dep.getDependencyType() == DependencyType.COMPILE_TIME)
+        .map(Dependency::getTargetKey)
         .collect(toList());
   }
 }

@@ -79,7 +79,7 @@ class DetachAllSourceJarsAction extends BlazeProjectAction {
             }
             LibraryEditor.updateLibrary(
                 project,
-                blazeProjectData.artifactLocationDecoder,
+                blazeProjectData.getArtifactLocationDecoder(),
                 libraryTable,
                 libraryTableModel,
                 blazeLibrary);
@@ -88,7 +88,7 @@ class DetachAllSourceJarsAction extends BlazeProjectAction {
         });
   }
 
-  static class DetachAllOnSync extends SyncListener.Adapter {
+  static class DetachAllOnSync implements SyncListener {
 
     @Override
     public void onSyncComplete(

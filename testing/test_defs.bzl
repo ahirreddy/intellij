@@ -62,7 +62,7 @@ _generate_test_suite = rule(
     outputs = {"out": "%{name}.java"},
 )
 
-def intellij_unit_test_suite(name, srcs, test_package_root, **kwargs):
+def intellij_unit_test_suite(name, srcs, test_package_root, class_rules = [], **kwargs):
     """Creates a java_test rule comprising all valid test classes in the specified srcs.
 
     Only classes ending in "Test.java" will be recognized.
@@ -75,14 +75,31 @@ def intellij_unit_test_suite(name, srcs, test_package_root, **kwargs):
     """
     suite_class_name = name + "TestSuite"
     suite_class = test_package_root + "." + suite_class_name
+
+    api_version_txt_name = name + "_api_version"
+    api_version_txt(name = api_version_txt_name)
+    data = kwargs.pop("data", [])
+    data.append(api_version_txt_name)
+
+    jvm_flags = list(kwargs.pop("jvm_flags", []))
+    jvm_flags.extend([
+        "-Didea.classpath.index.enabled=false",
+        "-Djava.awt.headless=true",
+        #        "-Didea.platform.prefix=" + platform_prefix,
+        "-Dblaze.idea.api.version.file=$(location %s)" % api_version_txt_name,
+    ])
+
     _generate_test_suite(
         name = suite_class_name,
         srcs = srcs,
         test_package_root = test_package_root,
+        class_rules = class_rules,
     )
     native.java_test(
         name = name,
         srcs = srcs + [suite_class_name],
+        data = data,
+        jvm_flags = jvm_flags,
         test_class = suite_class,
         **kwargs
     )
@@ -92,6 +109,7 @@ def intellij_integration_test_suite(
         srcs,
         test_package_root,
         deps,
+        additional_class_rules = [],
         size = "medium",
         jvm_flags = [],
         runtime_deps = [],
@@ -109,6 +127,7 @@ def intellij_integration_test_suite(
       srcs: the test classes.
       test_package_root: only tests under this package root will be run.
       deps: the required deps.
+      additional_class_rules: extra JUnit class rules to apply to these tests.
       size: the test size.
       jvm_flags: extra flags to be passed to the test vm.
       runtime_deps: the required runtime_deps.
@@ -125,7 +144,7 @@ def intellij_integration_test_suite(
         name = suite_class_name,
         srcs = srcs,
         test_package_root = test_package_root,
-        class_rules = ["com.google.idea.testing.BlazeTestSystemPropertiesRule"],
+        class_rules = ["com.google.idea.testing.BlazeTestSystemPropertiesRule"] + additional_class_rules,
     )
 
     api_version_txt_name = name + "_api_version"
@@ -182,4 +201,4 @@ def _get_test_srcs(targets):
     files = depset()
     for target in targets:
         files += target.files
-    return [f for f in files if f.basename.endswith("Test.java")]
+    return [f for f in files.to_list() if f.basename.endswith("Test.java")]

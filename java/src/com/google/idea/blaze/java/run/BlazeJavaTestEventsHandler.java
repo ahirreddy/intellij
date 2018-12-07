@@ -18,10 +18,12 @@ package com.google.idea.blaze.java.run;
 import com.google.common.collect.ImmutableSet;
 import com.google.idea.blaze.base.command.BlazeFlags;
 import com.google.idea.blaze.base.model.primitives.Kind;
+import com.google.idea.blaze.base.model.primitives.Label;
 import com.google.idea.blaze.base.run.smrunner.BlazeTestEventsHandler;
 import com.google.idea.blaze.base.run.smrunner.BlazeXmlSchema.TestSuite;
 import com.google.idea.blaze.java.run.producers.BlazeJUnitTestFilterFlags;
 import com.google.idea.blaze.java.sync.source.JavaLikeLanguage;
+import com.google.idea.sdkcompat.run.JavaTestCaseProtocolCompat;
 import com.intellij.execution.Location;
 import com.intellij.execution.testframework.JavaTestLocator;
 import com.intellij.execution.testframework.sm.runner.SMTestLocator;
@@ -50,7 +52,7 @@ public class BlazeJavaTestEventsHandler implements BlazeTestEventsHandler {
 
   /** Overridden to support parameterized tests, which use nested test_suite XML elements. */
   @Override
-  public boolean ignoreSuite(@Nullable Kind kind, TestSuite suite) {
+  public boolean ignoreSuite(Label label, @Nullable Kind kind, TestSuite suite) {
     if (suite.testSuites.isEmpty()) {
       return false;
     }
@@ -69,22 +71,29 @@ public class BlazeJavaTestEventsHandler implements BlazeTestEventsHandler {
   }
 
   @Override
-  public String suiteLocationUrl(@Nullable Kind kind, String name) {
+  public String suiteLocationUrl(Label label, @Nullable Kind kind, String name) {
     return JavaTestLocator.SUITE_PROTOCOL + URLUtil.SCHEME_SEPARATOR + name;
   }
 
   @Override
   public String testLocationUrl(
-      @Nullable Kind kind, String parentSuite, String name, @Nullable String classname) {
+      Label label,
+      @Nullable Kind kind,
+      String parentSuite,
+      String name,
+      @Nullable String classname) {
     if (classname == null) {
       return null;
     }
     String classComponent = JavaTestLocator.TEST_PROTOCOL + URLUtil.SCHEME_SEPARATOR + classname;
     String parameterComponent = extractParameterComponent(name);
     if (parameterComponent != null) {
-      return classComponent + "." + parentSuite + parameterComponent;
+      return classComponent
+          + JavaTestCaseProtocolCompat.TEST_CASE_SEPARATOR
+          + parentSuite
+          + parameterComponent;
     }
-    return classComponent + "." + name;
+    return classComponent + JavaTestCaseProtocolCompat.TEST_CASE_SEPARATOR + name;
   }
 
   @Nullable
@@ -96,10 +105,10 @@ public class BlazeJavaTestEventsHandler implements BlazeTestEventsHandler {
   }
 
   @Override
-  public String suiteDisplayName(@Nullable Kind kind, String rawName) {
+  public String suiteDisplayName(Label label, @Nullable Kind kind, String rawName) {
     String name = StringUtil.trimEnd(rawName, '.');
     int lastPointIx = name.lastIndexOf('.');
-    return lastPointIx != -1 ? name.substring(lastPointIx + 1, name.length()) : name;
+    return lastPointIx != -1 ? name.substring(lastPointIx + 1) : name;
   }
 
   @Nullable

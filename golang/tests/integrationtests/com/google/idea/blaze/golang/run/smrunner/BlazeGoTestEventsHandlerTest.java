@@ -30,14 +30,14 @@ import com.google.idea.blaze.base.ideinfo.TargetMapBuilder;
 import com.google.idea.blaze.base.lang.buildfile.psi.BuildFile;
 import com.google.idea.blaze.base.lang.buildfile.psi.FuncallExpression;
 import com.google.idea.blaze.base.lang.buildfile.psi.util.PsiUtils;
-import com.google.idea.blaze.base.model.BlazeProjectData;
+import com.google.idea.blaze.base.model.MockBlazeProjectDataBuilder;
 import com.google.idea.blaze.base.model.MockBlazeProjectDataManager;
+import com.google.idea.blaze.base.model.primitives.Label;
 import com.google.idea.blaze.base.model.primitives.LanguageClass;
 import com.google.idea.blaze.base.model.primitives.WorkspacePath;
 import com.google.idea.blaze.base.model.primitives.WorkspaceType;
 import com.google.idea.blaze.base.sync.data.BlazeProjectDataManager;
 import com.google.idea.blaze.base.sync.projectview.WorkspaceLanguageSettings;
-import com.google.idea.blaze.base.sync.workspace.WorkspacePathResolverImpl;
 import com.intellij.execution.Location;
 import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.psi.search.GlobalSearchScope;
@@ -74,17 +74,12 @@ public class BlazeGoTestEventsHandlerTest extends BlazeIntegrationTestCase {
     registerProjectService(
         BlazeProjectDataManager.class,
         new MockBlazeProjectDataManager(
-            new BlazeProjectData(
-                0L,
-                targetMap,
-                null,
-                null,
-                new WorkspacePathResolverImpl(workspaceRoot),
-                location ->
-                    workspaceRoot.fileForPath(new WorkspacePath(location.getRelativePath())),
-                new WorkspaceLanguageSettings(WorkspaceType.GO, ImmutableSet.of(LanguageClass.GO)),
-                null,
-                null)));
+            MockBlazeProjectDataBuilder.builder(workspaceRoot)
+                .setTargetMap(targetMap)
+                .setWorkspaceLanguageSettings(
+                    new WorkspaceLanguageSettings(
+                        WorkspaceType.GO, ImmutableSet.of(LanguageClass.GO)))
+                .build()));
 
     workspace.createFile(
         new WorkspacePath("foo/bar/foo_test.go"),
@@ -114,7 +109,7 @@ public class BlazeGoTestEventsHandlerTest extends BlazeIntegrationTestCase {
         PsiUtils.findFirstChildOfClassRecursive(buildFile, FuncallExpression.class);
     assertThat(buildRule).isNotNull();
 
-    String url = handler.suiteLocationUrl(null, "foo/bar/foo_test");
+    String url = handler.suiteLocationUrl(Label.create("//foo/bar:foo_test"), null, "foo_test");
     Location<?> location = getLocation(url);
     assertThat(location).isNotNull();
     assertThat(location.getPsiElement()).isEqualTo(buildRule);
@@ -139,17 +134,12 @@ public class BlazeGoTestEventsHandlerTest extends BlazeIntegrationTestCase {
     registerProjectService(
         BlazeProjectDataManager.class,
         new MockBlazeProjectDataManager(
-            new BlazeProjectData(
-                0L,
-                targetMap,
-                null,
-                null,
-                new WorkspacePathResolverImpl(workspaceRoot),
-                location ->
-                    workspaceRoot.fileForPath(new WorkspacePath(location.getRelativePath())),
-                new WorkspaceLanguageSettings(WorkspaceType.GO, ImmutableSet.of(LanguageClass.GO)),
-                null,
-                null)));
+            MockBlazeProjectDataBuilder.builder(workspaceRoot)
+                .setTargetMap(targetMap)
+                .setWorkspaceLanguageSettings(
+                    new WorkspaceLanguageSettings(
+                        WorkspaceType.GO, ImmutableSet.of(LanguageClass.GO)))
+                .build()));
 
     GoFile goFile =
         (GoFile)
@@ -166,7 +156,7 @@ public class BlazeGoTestEventsHandlerTest extends BlazeIntegrationTestCase {
         "    srcs = ['foo_test.go'],",
         ")");
 
-    String url = handler.suiteLocationUrl(null, "foo/bar/foo_test");
+    String url = handler.suiteLocationUrl(Label.create("//foo/bar:foo_test"), null, "foo_test");
     Location<?> location = getLocation(url);
     assertThat(location).isNotNull();
     assertThat(location.getPsiElement()).isEqualTo(goFile);
@@ -191,17 +181,12 @@ public class BlazeGoTestEventsHandlerTest extends BlazeIntegrationTestCase {
     registerProjectService(
         BlazeProjectDataManager.class,
         new MockBlazeProjectDataManager(
-            new BlazeProjectData(
-                0L,
-                targetMap,
-                null,
-                null,
-                new WorkspacePathResolverImpl(workspaceRoot),
-                location ->
-                    workspaceRoot.fileForPath(new WorkspacePath(location.getRelativePath())),
-                new WorkspaceLanguageSettings(WorkspaceType.GO, ImmutableSet.of(LanguageClass.GO)),
-                null,
-                null)));
+            MockBlazeProjectDataBuilder.builder(workspaceRoot)
+                .setTargetMap(targetMap)
+                .setWorkspaceLanguageSettings(
+                    new WorkspaceLanguageSettings(
+                        WorkspaceType.GO, ImmutableSet.of(LanguageClass.GO)))
+                .build()));
 
     GoFile goFile =
         (GoFile)
@@ -218,7 +203,7 @@ public class BlazeGoTestEventsHandlerTest extends BlazeIntegrationTestCase {
         "    srcs = ['foo_test.go'],",
         ")");
 
-    String url = handler.suiteLocationUrl(null, "foo_test");
+    String url = handler.suiteLocationUrl(Label.create("//:foo_test"), null, "foo_test");
     Location<?> location = getLocation(url);
     assertThat(location).isNotNull();
     assertThat(location.getPsiElement()).isEqualTo(goFile);
@@ -243,18 +228,12 @@ public class BlazeGoTestEventsHandlerTest extends BlazeIntegrationTestCase {
     registerProjectService(
         BlazeProjectDataManager.class,
         new MockBlazeProjectDataManager(
-            new BlazeProjectData(
-                0L,
-                targetMap,
-                null,
-                null,
-                new WorkspacePathResolverImpl(workspaceRoot),
-                location ->
-                    workspaceRoot.fileForPath(new WorkspacePath(location.getRelativePath())),
-                new WorkspaceLanguageSettings(WorkspaceType.GO, ImmutableSet.of(LanguageClass.GO)),
-                null,
-                null)));
-
+            MockBlazeProjectDataBuilder.builder(workspaceRoot)
+                .setTargetMap(targetMap)
+                .setWorkspaceLanguageSettings(
+                    new WorkspaceLanguageSettings(
+                        WorkspaceType.GO, ImmutableSet.of(LanguageClass.GO)))
+                .build()));
     GoFile goFile =
         (GoFile)
             workspace.createPsiFile(
@@ -274,7 +253,9 @@ public class BlazeGoTestEventsHandlerTest extends BlazeIntegrationTestCase {
         PsiUtils.findFirstChildOfClassRecursive(goFile, GoFunctionDeclaration.class);
     assertThat(function).isNotNull();
 
-    String url = handler.testLocationUrl(null, "foo/bar/foo_test", "TestFoo", null);
+    String url =
+        handler.testLocationUrl(
+            Label.create("//foo/bar:foo_test"), null, "foo_test", "TestFoo", null);
     Location<?> location = getLocation(url);
     assertThat(location).isNotNull();
     assertThat(location.getPsiElement()).isEqualTo(function);

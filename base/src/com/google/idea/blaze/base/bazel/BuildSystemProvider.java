@@ -16,17 +16,18 @@
 package com.google.idea.blaze.base.bazel;
 
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableSet;
 import com.google.idea.blaze.base.command.info.BlazeInfo;
 import com.google.idea.blaze.base.io.FileOperationProvider;
 import com.google.idea.blaze.base.lang.buildfile.language.semantics.RuleDefinition;
 import com.google.idea.blaze.base.model.BlazeVersionData;
 import com.google.idea.blaze.base.model.primitives.WorkspaceRoot;
+import com.google.idea.blaze.base.settings.BuildBinaryType;
 import com.google.idea.blaze.base.settings.BuildSystem;
 import com.intellij.openapi.extensions.ExtensionPointName;
 import com.intellij.openapi.fileTypes.ExactFileNameMatcher;
 import com.intellij.openapi.fileTypes.ExtensionFileNameMatcher;
 import com.intellij.openapi.fileTypes.FileNameMatcher;
+import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import java.io.File;
 import javax.annotation.Nullable;
@@ -76,12 +77,15 @@ public interface BuildSystemProvider {
   BuildSystem buildSystem();
 
   /** @return The location of the blaze/bazel binary. */
-  String getBinaryPath();
+  String getBinaryPath(Project project);
 
   /** @return The location of the blaze/bazel binary to use for syncing. */
-  default String getSyncBinaryPath() {
-    return getBinaryPath();
+  default String getSyncBinaryPath(Project project) {
+    return getBinaryPath(project);
   }
+
+  /** @return The type of the blaze/bazel binary to use for syncing */
+  BuildBinaryType getSyncBinaryType();
 
   WorkspaceRootProvider getWorkspaceRootProvider();
 
@@ -105,8 +109,11 @@ public interface BuildSystemProvider {
   @Nullable
   String getLanguageSupportDocumentationUrl(String relativeDocName);
 
-  /** The BUILD filenames supported by this build system. */
-  ImmutableSet<String> possibleBuildFileNames();
+  /**
+   * The BUILD filenames supported by this build system, in decreasing order of preference (e.g. if
+   * both BUILD and BUILD.bazel exist in a directory, bazel ignores the former).
+   */
+  ImmutableList<String> possibleBuildFileNames();
 
   /** Check if the given filename is a valid BUILD file name. */
   default boolean isBuildFile(String fileName) {

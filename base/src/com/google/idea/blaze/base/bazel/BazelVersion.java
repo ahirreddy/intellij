@@ -18,28 +18,52 @@ package com.google.idea.blaze.base.bazel;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Objects;
 import com.google.common.collect.ComparisonChain;
+import com.google.devtools.intellij.model.ProjectData;
 import com.google.idea.blaze.base.command.info.BlazeInfo;
+import com.google.idea.blaze.base.ideinfo.ProtoWrapper;
 import com.intellij.openapi.util.text.StringUtil;
-import java.io.Serializable;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.annotation.Nullable;
 
 /** Bazel version */
-public class BazelVersion implements Serializable {
-  private static final long serialVersionUID = 1L;
-
+public class BazelVersion implements ProtoWrapper<ProjectData.BazelVersion> {
   static final BazelVersion DEVELOPMENT = new BazelVersion(999, 999, 999);
   private static final Pattern PATTERN = Pattern.compile("([[0-9]\\.]+)");
 
-  final int major;
-  final int minor;
-  final int bugfix;
+  private final int major;
+  private final int minor;
+  private final int bugfix;
 
   public BazelVersion(int major, int minor, int bugfix) {
     this.bugfix = bugfix;
     this.minor = minor;
     this.major = major;
+  }
+
+  public static BazelVersion fromProto(ProjectData.BazelVersion proto) {
+    return new BazelVersion(proto.getMajor(), proto.getMinor(), proto.getBugfix());
+  }
+
+  @Override
+  public ProjectData.BazelVersion toProto() {
+    return ProjectData.BazelVersion.newBuilder()
+        .setMajor(major)
+        .setMinor(minor)
+        .setBugfix(bugfix)
+        .build();
+  }
+
+  int getMajor() {
+    return major;
+  }
+
+  int getMinor() {
+    return minor;
+  }
+
+  int getBugfix() {
+    return bugfix;
   }
 
   @VisibleForTesting

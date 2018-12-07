@@ -19,6 +19,7 @@ import static com.google.common.truth.Truth.assertThat;
 
 import com.google.common.collect.Iterables;
 import com.google.idea.blaze.base.BlazeIntegrationTestCase;
+import com.google.idea.blaze.base.model.primitives.Label;
 import com.google.idea.blaze.base.model.primitives.WorkspacePath;
 import com.intellij.execution.Location;
 import com.intellij.openapi.vfs.VirtualFileManager;
@@ -28,6 +29,7 @@ import com.intellij.psi.PsiFile;
 import com.intellij.psi.PsiMethod;
 import com.intellij.psi.search.GlobalSearchScope;
 import javax.annotation.Nullable;
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -36,7 +38,13 @@ import org.junit.runners.JUnit4;
 @RunWith(JUnit4.class)
 public class BlazeJavaTestEventsHandlerTest extends BlazeIntegrationTestCase {
 
-  private final BlazeJavaTestEventsHandler handler = new BlazeJavaTestEventsHandler();
+  private BlazeJavaTestEventsHandler handler;
+
+  @Before
+  public final void doSetUp() {
+    // EPs must be set up before initializing BlazeJavaTestEventsHandler
+    handler = new BlazeJavaTestEventsHandler();
+  }
 
   @Test
   public void testSuiteLocationResolves() {
@@ -48,7 +56,9 @@ public class BlazeJavaTestEventsHandlerTest extends BlazeIntegrationTestCase {
     PsiClass javaClass = ((PsiClassOwner) javaFile).getClasses()[0];
     assertThat(javaClass).isNotNull();
 
-    String url = handler.suiteLocationUrl(null, "com.google.lib.JavaClass");
+    String url =
+        handler.suiteLocationUrl(
+            Label.create("//java/com/google/lib:JavaClass"), null, "com.google.lib.JavaClass");
     Location<?> location = getLocation(url);
     assertThat(location.getPsiElement()).isEqualTo(javaClass);
   }
@@ -66,7 +76,13 @@ public class BlazeJavaTestEventsHandlerTest extends BlazeIntegrationTestCase {
     PsiMethod method = javaClass.findMethodsByName("testMethod", false)[0];
     assertThat(method).isNotNull();
 
-    String url = handler.testLocationUrl(null, null, "testMethod", "com.google.lib.JavaClass");
+    String url =
+        handler.testLocationUrl(
+            Label.create("//java/com/google/lib:JavaClass"),
+            null,
+            null,
+            "testMethod",
+            "com.google.lib.JavaClass");
     Location<?> location = getLocation(url);
     assertThat(location.getPsiElement()).isEqualTo(method);
   }
@@ -86,7 +102,11 @@ public class BlazeJavaTestEventsHandlerTest extends BlazeIntegrationTestCase {
 
     String url =
         handler.testLocationUrl(
-            null, "testMethod", "[0] true (testMethod)", "com.google.lib.JavaClass");
+            Label.create("//java/com/google/lib:JavaClass"),
+            null,
+            "testMethod",
+            "[0] true (testMethod)",
+            "com.google.lib.JavaClass");
     Location<?> location = getLocation(url);
     assertThat(location.getPsiElement()).isEqualTo(method);
   }

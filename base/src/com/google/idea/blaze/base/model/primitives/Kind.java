@@ -19,12 +19,14 @@ import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableMultimap;
 import com.google.common.collect.ImmutableSet;
+import com.google.devtools.intellij.ideinfo.IntellijIdeInfo;
+import com.google.idea.blaze.base.ideinfo.ProtoWrapper;
 import java.util.Arrays;
 import java.util.Collection;
 import javax.annotation.Nullable;
 
 /** Wrapper around a string for a blaze kind (android_library, android_test...) */
-public enum Kind {
+public enum Kind implements ProtoWrapper<String> {
   ANDROID_BINARY("android_binary", LanguageClass.ANDROID, RuleType.BINARY),
   ANDROID_LIBRARY("android_library", LanguageClass.ANDROID, RuleType.LIBRARY),
   ANDROID_TEST("android_test", LanguageClass.ANDROID, RuleType.TEST),
@@ -50,6 +52,7 @@ public enum Kind {
   CC_TEST("cc_test", LanguageClass.C, RuleType.TEST),
   CC_INC_LIBRARY("cc_inc_library", LanguageClass.C, RuleType.LIBRARY),
   CC_TOOLCHAIN("cc_toolchain", LanguageClass.C, RuleType.UNKNOWN),
+  CC_TOOLCHAIN_SUITE("cc_toolchain_suite", LanguageClass.C, RuleType.UNKNOWN),
   JAVA_WRAP_CC("java_wrap_cc", LanguageClass.JAVA, RuleType.UNKNOWN),
   GWT_APPLICATION("gwt_application", LanguageClass.JAVA, RuleType.UNKNOWN),
   GWT_HOST("gwt_host", LanguageClass.JAVA, RuleType.UNKNOWN),
@@ -95,14 +98,20 @@ public enum Kind {
   PINTO_LIBRARY_MOD("pinto_library_mod", LanguageClass.JAVASCRIPT, RuleType.LIBRARY),
   PINTO_MODULE("pinto_module", LanguageClass.JAVASCRIPT, RuleType.UNKNOWN),
   NG_MODULE("ng_module", LanguageClass.TYPESCRIPT, RuleType.LIBRARY),
+  NODEJS_BINARY("_nodejs_binary", LanguageClass.JAVASCRIPT, RuleType.BINARY),
+  NODEJS_MODULE("_nodejs_module", LanguageClass.JAVASCRIPT, RuleType.LIBRARY),
+  NODEJS_TEST("_nodejs_test", LanguageClass.JAVASCRIPT, RuleType.TEST),
+  // not executable, despite the name
+  CHECKABLE_JS_LIB_BINARY("checkable_js_lib_binary", LanguageClass.JAVASCRIPT, RuleType.LIBRARY),
+  WEB_TEST("web_test", LanguageClass.GENERIC, RuleType.TEST),
   TS_LIBRARY("ts_library", LanguageClass.TYPESCRIPT, RuleType.LIBRARY),
   TS_CONFIG("ts_config", LanguageClass.TYPESCRIPT, RuleType.BINARY),
   DART_PROTO_LIBRARY("dart_proto_library", LanguageClass.DART, RuleType.LIBRARY),
   DART_LIBRARY("_dart_library", LanguageClass.DART, RuleType.LIBRARY),
   DART_VM_TEST("dart_vm_test", LanguageClass.DART, RuleType.TEST),
-  KT_JVM_LIBRARY("kt_jvm_library", LanguageClass.KOTLIN, RuleType.LIBRARY),
   KT_JVM_TOOLCHAIN("kt_jvm_toolchain", LanguageClass.KOTLIN, RuleType.UNKNOWN),
-  // TODO(brendandouglas): remove this once kotlin rules expose jdeps and genjars
+  // TODO(brendandouglas): remove these once kotlin rules expose genjars
+  KT_JVM_LIBRARY_HELPER("kt_jvm_library_helper", LanguageClass.KOTLIN, RuleType.LIBRARY),
   KT_ANDROID_LIBRARY_HELPER("kt_android_library_helper", LanguageClass.KOTLIN, RuleType.LIBRARY),
   // bazel only kotlin rules:
   KT_JVM_BINARY("kt_jvm_binary", LanguageClass.KOTLIN, RuleType.BINARY),
@@ -196,5 +205,20 @@ public enum Kind {
   private static boolean isTestSuite(String ruleName) {
     // handle plain test_suite targets and macros producing a test/test_suite
     return "test_suite".equals(ruleName) || ruleName.endsWith("test_suites");
+  }
+
+  @Nullable
+  public static Kind fromProto(IntellijIdeInfo.TargetIdeInfo proto) {
+    Kind kind = Kind.fromString(proto.getKindString());
+    if (kind == null && proto.hasJavaIdeInfo()) {
+      // kind = Kind.GENERIC_JAVA_PROVIDER;
+      throw new RuntimeException("No kind found for: " + proto.getKindString());
+    }
+    return kind;
+  }
+
+  @Override
+  public String toProto() {
+    return kind;
   }
 }

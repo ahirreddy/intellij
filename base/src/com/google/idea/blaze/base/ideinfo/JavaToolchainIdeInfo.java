@@ -15,22 +15,52 @@
  */
 package com.google.idea.blaze.base.ideinfo;
 
-import java.io.Serializable;
+import com.google.devtools.intellij.ideinfo.IntellijIdeInfo;
+import java.util.Objects;
 import javax.annotation.Nullable;
 
 /** Represents the java_toolchain class */
-public class JavaToolchainIdeInfo implements Serializable {
-  private static final long serialVersionUID = 2L;
+public final class JavaToolchainIdeInfo
+    implements ProtoWrapper<IntellijIdeInfo.JavaToolchainIdeInfo> {
+  private final String sourceVersion;
+  private final String targetVersion;
+  @Nullable private final ArtifactLocation javacJar;
 
-  public final String sourceVersion;
-  public final String targetVersion;
-  @Nullable public final ArtifactLocation javacJar;
-
-  public JavaToolchainIdeInfo(
+  private JavaToolchainIdeInfo(
       String sourceVersion, String targetVersion, @Nullable ArtifactLocation javacJar) {
     this.sourceVersion = sourceVersion;
     this.targetVersion = targetVersion;
     this.javacJar = javacJar;
+  }
+
+  static JavaToolchainIdeInfo fromProto(IntellijIdeInfo.JavaToolchainIdeInfo proto) {
+    return new JavaToolchainIdeInfo(
+        proto.getSourceVersion(),
+        proto.getTargetVersion(),
+        proto.hasJavacJar() ? ArtifactLocation.fromProto(proto.getJavacJar()) : null);
+  }
+
+  @Override
+  public IntellijIdeInfo.JavaToolchainIdeInfo toProto() {
+    IntellijIdeInfo.JavaToolchainIdeInfo.Builder builder =
+        IntellijIdeInfo.JavaToolchainIdeInfo.newBuilder()
+            .setSourceVersion(sourceVersion)
+            .setTargetVersion(targetVersion);
+    ProtoWrapper.unwrapAndSetIfNotNull(builder::setJavacJar, javacJar);
+    return builder.build();
+  }
+
+  public String getSourceVersion() {
+    return sourceVersion;
+  }
+
+  public String getTargetVersion() {
+    return targetVersion;
+  }
+
+  @Nullable
+  public ArtifactLocation getJavacJar() {
+    return javacJar;
   }
 
   @Override
@@ -38,15 +68,34 @@ public class JavaToolchainIdeInfo implements Serializable {
     return "JavaToolchainIdeInfo{"
         + "\n"
         + "  sourceVersion="
-        + sourceVersion
+        + getSourceVersion()
         + "\n"
         + "  targetVersion="
-        + targetVersion
+        + getTargetVersion()
         + "\n"
         + "  javacJar="
-        + javacJar
+        + getJavacJar()
         + "\n"
         + '}';
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    JavaToolchainIdeInfo that = (JavaToolchainIdeInfo) o;
+    return Objects.equals(sourceVersion, that.sourceVersion)
+        && Objects.equals(targetVersion, that.targetVersion)
+        && Objects.equals(javacJar, that.javacJar);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(sourceVersion, targetVersion, javacJar);
   }
 
   public static Builder builder() {

@@ -16,24 +16,38 @@
 package com.google.idea.blaze.base.ideinfo;
 
 import com.google.common.base.Objects;
-import java.io.Serializable;
+import com.google.devtools.intellij.ideinfo.IntellijIdeInfo;
+import com.google.devtools.intellij.ideinfo.IntellijIdeInfo.Dependency.DependencyType;
 
 /** Represents a dependency between two targets. */
-public class Dependency implements Serializable {
-  private static final long serialVersionUID = 1L;
-
-  /** Type of dependency */
-  public enum DependencyType {
-    COMPILE_TIME,
-    RUNTIME
-  }
-
-  public final TargetKey targetKey;
-  public final DependencyType dependencyType;
+public final class Dependency implements ProtoWrapper<IntellijIdeInfo.Dependency> {
+  private final TargetKey targetKey;
+  private final DependencyType dependencyType;
 
   public Dependency(TargetKey targetKey, DependencyType dependencyType) {
     this.targetKey = targetKey;
     this.dependencyType = dependencyType;
+  }
+
+  static Dependency fromProto(IntellijIdeInfo.Dependency proto) {
+    return ProjectDataInterner.intern(
+        new Dependency(TargetKey.fromProto(proto.getTarget()), proto.getDependencyType()));
+  }
+
+  @Override
+  public IntellijIdeInfo.Dependency toProto() {
+    return IntellijIdeInfo.Dependency.newBuilder()
+        .setTarget(targetKey.toProto())
+        .setDependencyType(dependencyType)
+        .build();
+  }
+
+  public TargetKey getTargetKey() {
+    return targetKey;
+  }
+
+  public IntellijIdeInfo.Dependency.DependencyType getDependencyType() {
+    return dependencyType;
   }
 
   @Override
@@ -45,11 +59,12 @@ public class Dependency implements Serializable {
       return false;
     }
     Dependency that = (Dependency) o;
-    return Objects.equal(targetKey, that.targetKey) && dependencyType == that.dependencyType;
+    return Objects.equal(getTargetKey(), that.getTargetKey())
+        && getDependencyType() == that.getDependencyType();
   }
 
   @Override
   public int hashCode() {
-    return Objects.hashCode(targetKey, dependencyType);
+    return Objects.hashCode(getTargetKey(), getDependencyType());
   }
 }

@@ -22,6 +22,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.google.idea.blaze.base.ideinfo.ArtifactLocation;
 import com.google.idea.blaze.base.model.BlazeProjectData;
+import com.google.idea.blaze.base.model.MockBlazeProjectDataBuilder;
 import com.google.idea.blaze.base.model.MockBlazeProjectDataManager;
 import com.google.idea.blaze.base.model.primitives.Label;
 import com.google.idea.blaze.base.sync.data.BlazeProjectDataManager;
@@ -59,6 +60,7 @@ public final class FastBuildCompilerFactoryImplTest {
       JavaInfo.create(
           /*sources*/ ImmutableSet.of(),
           /*testClass*/ null,
+          /*testSize*/ null,
           /* annotationProcessorClassNames */ ImmutableList.of(),
           /* annotationProcessorClassPath */ ImmutableList.of(),
           /* jvmFlags */ ImmutableList.of());
@@ -282,16 +284,9 @@ public final class FastBuildCompilerFactoryImplTest {
 
   private static FastBuildCompilerFactoryImpl createCompilerFactory() {
     BlazeProjectData projectData =
-        new BlazeProjectData(
-            0,
-            null,
-            null,
-            null,
-            null,
-            artifact -> new File(artifact.relativePath),
-            null,
-            null,
-            null);
+        MockBlazeProjectDataBuilder.builder()
+            .setArtifactLocationDecoder(artifact -> new File(artifact.getRelativePath()))
+            .build();
     BlazeProjectDataManager projectDataManager = new MockBlazeProjectDataManager(projectData);
     return new FastBuildCompilerFactoryImpl(projectDataManager);
   }

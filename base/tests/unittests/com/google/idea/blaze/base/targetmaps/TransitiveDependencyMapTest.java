@@ -17,6 +17,7 @@ package com.google.idea.blaze.base.targetmaps;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.common.collect.ImmutableSet;
 import com.google.idea.blaze.base.BlazeTestCase;
 import com.google.idea.blaze.base.ideinfo.TargetIdeInfo;
 import com.google.idea.blaze.base.ideinfo.TargetKey;
@@ -24,10 +25,15 @@ import com.google.idea.blaze.base.ideinfo.TargetMap;
 import com.google.idea.blaze.base.ideinfo.TargetMapBuilder;
 import com.google.idea.blaze.base.model.MockBlazeProjectDataBuilder;
 import com.google.idea.blaze.base.model.MockBlazeProjectDataManager;
+import com.google.idea.blaze.base.model.primitives.Kind;
 import com.google.idea.blaze.base.model.primitives.Label;
 import com.google.idea.blaze.base.model.primitives.WorkspaceRoot;
 import com.google.idea.blaze.base.sync.data.BlazeProjectDataManager;
 import java.io.File;
+import java.util.Collection;
+import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -37,18 +43,53 @@ import org.junit.runners.JUnit4;
 public class TransitiveDependencyMapTest extends BlazeTestCase {
   private TransitiveDependencyMap transitiveDependencyMap;
   private final WorkspaceRoot workspaceRoot = new WorkspaceRoot(new File("/"));
+  private TargetMap targetMap;
 
   @Override
   protected void initTest(Container applicationServices, Container projectServices) {
     super.initTest(applicationServices, projectServices);
+    targetMap = buildTargetMap();
     projectServices.register(
         BlazeProjectDataManager.class,
         new MockBlazeProjectDataManager(
-            MockBlazeProjectDataBuilder.builder(workspaceRoot)
-                .setTargetMap(buildTargetMap())
-                .build()));
+            MockBlazeProjectDataBuilder.builder(workspaceRoot).setTargetMap(targetMap).build()));
     projectServices.register(TransitiveDependencyMap.class, new TransitiveDependencyMap(project));
     transitiveDependencyMap = TransitiveDependencyMap.getInstance(project);
+  }
+
+  @Test
+  public void testStreamIsBreadthFirstTraversal() {
+    TargetKey diamondA = TargetKey.forPlainTarget(Label.create("//com/google/example/diamond:a"));
+    TargetKey diamondB = TargetKey.forPlainTarget(Label.create("//com/google/example/diamond:b"));
+    TargetKey diamondBB = TargetKey.forPlainTarget(Label.create("//com/google/example/diamond:bb"));
+    TargetKey diamondBBB =
+        TargetKey.forPlainTarget(Label.create("//com/google/example/diamond:bbb"));
+    TargetKey diamondC = TargetKey.forPlainTarget(Label.create("//com/google/example/diamond:c"));
+    TargetKey diamondCC = TargetKey.forPlainTarget(Label.create("//com/google/example/diamond:cc"));
+    TargetKey diamondCCC =
+        TargetKey.forPlainTarget(Label.create("//com/google/example/diamond:ccc"));
+
+    Collection<TargetKey> topLevelTargets = ImmutableSet.of(diamondA, diamondBBB);
+    List<TargetKey> deps =
+        TransitiveDependencyMap.getTransitiveDependenciesStream(topLevelTargets, targetMap)
+            .collect(Collectors.toList());
+
+    assertThat(deps)
+        .containsExactly(diamondB, diamondBB, diamondBBB, diamondC, diamondCC, diamondCCC)
+        .inOrder();
+  }
+
+  @Test
+  public void testHasDependencyMatchesGetTransitiveDependencies() {
+    Set<TargetKey> keys = targetMap.map().keySet();
+
+    for (TargetKey key : keys) {
+      assertThat(
+              keys.stream()
+                  .filter(it -> transitiveDependencyMap.hasTransitiveDependency(key, it))
+                  .collect(Collectors.toSet()))
+          .containsExactlyElementsIn(transitiveDependencyMap.getTransitiveDependencies(key));
+    }
   }
 
   @Test
@@ -92,7 +133,7 @@ public class TransitiveDependencyMapTest extends BlazeTestCase {
     assertThat(transitiveDependencyMap.getTransitiveDependencies(diamondB))
         .containsExactly(diamondC);
     assertThat(transitiveDependencyMap.getTransitiveDependencies(diamondBB))
-        .containsExactly(diamondC, diamondCC);
+        .containsExactly(diamondB, diamondC, diamondCC);
     assertThat(transitiveDependencyMap.getTransitiveDependencies(diamondBBB))
         .containsExactly(diamondC, diamondCC, diamondCCC);
     assertThat(transitiveDependencyMap.getTransitiveDependencies(diamondC)).isEmpty();
@@ -121,33 +162,38 @@ public class TransitiveDependencyMapTest extends BlazeTestCase {
     Label diamondCC = Label.create("//com/google/example/diamond:cc");
     Label diamondCCC = Label.create("//com/google/example/diamond:ccc");
     return TargetMapBuilder.builder()
-        .addTarget(TargetIdeInfo.builder().setLabel(simpleA).addDependency(simpleB))
-        .addTarget(TargetIdeInfo.builder().setLabel(simpleB))
-        .addTarget(TargetIdeInfo.builder().setLabel(chainA).addDependency(chainB))
-        .addTarget(TargetIdeInfo.builder().setLabel(chainB).addDependency(chainC))
-        .addTarget(TargetIdeInfo.builder().setLabel(chainC).addDependency(chainD))
-        .addTarget(TargetIdeInfo.builder().setLabel(chainD))
+        .addTarget(mockTargetIdeInfoBuilder().setLabel(simpleA).addDependency(simpleB))
+        .addTarget(mockTargetIdeInfoBuilder().setLabel(simpleB))
+        .addTarget(mockTargetIdeInfoBuilder().setLabel(chainA).addDependency(chainB))
+        .addTarget(mockTargetIdeInfoBuilder().setLabel(chainB).addDependency(chainC))
+        .addTarget(mockTargetIdeInfoBuilder().setLabel(chainC).addDependency(chainD))
+        .addTarget(mockTargetIdeInfoBuilder().setLabel(chainD))
         .addTarget(
-            TargetIdeInfo.builder()
+            mockTargetIdeInfoBuilder()
                 .setLabel(diamondA)
                 .addDependency(diamondB)
                 .addDependency(diamondBB)
                 .addDependency(diamondBBB))
-        .addTarget(TargetIdeInfo.builder().setLabel(diamondB).addDependency(diamondC))
+        .addTarget(mockTargetIdeInfoBuilder().setLabel(diamondB).addDependency(diamondC))
         .addTarget(
-            TargetIdeInfo.builder()
+            mockTargetIdeInfoBuilder()
                 .setLabel(diamondBB)
+                .addDependency(diamondB)
                 .addDependency(diamondC)
                 .addDependency(diamondCC))
         .addTarget(
-            TargetIdeInfo.builder()
+            mockTargetIdeInfoBuilder()
                 .setLabel(diamondBBB)
                 .addDependency(diamondC)
                 .addDependency(diamondCC)
                 .addDependency(diamondCCC))
-        .addTarget(TargetIdeInfo.builder().setLabel(diamondC))
-        .addTarget(TargetIdeInfo.builder().setLabel(diamondCC))
-        .addTarget(TargetIdeInfo.builder().setLabel(diamondCCC))
+        .addTarget(mockTargetIdeInfoBuilder().setLabel(diamondC))
+        .addTarget(mockTargetIdeInfoBuilder().setLabel(diamondCC))
+        .addTarget(mockTargetIdeInfoBuilder().setLabel(diamondCCC))
         .build();
+  }
+
+  private static TargetIdeInfo.Builder mockTargetIdeInfoBuilder() {
+    return TargetIdeInfo.builder().setKind(Kind.JAVA_LIBRARY);
   }
 }

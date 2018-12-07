@@ -16,16 +16,30 @@
 package com.google.idea.blaze.base.ideinfo;
 
 import com.google.common.collect.ImmutableList;
-import java.io.Serializable;
+import com.google.devtools.intellij.ideinfo.IntellijIdeInfo;
+import java.util.Objects;
 
 /** Ide info specific to js rules. */
-public class JsIdeInfo implements Serializable {
-  private static final long serialVersionUID = 1L;
+public final class JsIdeInfo implements ProtoWrapper<IntellijIdeInfo.JsIdeInfo> {
+  private final ImmutableList<ArtifactLocation> sources;
 
-  public final ImmutableList<ArtifactLocation> sources;
-
-  public JsIdeInfo(ImmutableList<ArtifactLocation> sources) {
+  private JsIdeInfo(ImmutableList<ArtifactLocation> sources) {
     this.sources = sources;
+  }
+
+  static JsIdeInfo fromProto(IntellijIdeInfo.JsIdeInfo proto) {
+    return new JsIdeInfo(ProtoWrapper.map(proto.getSourcesList(), ArtifactLocation::fromProto));
+  }
+
+  @Override
+  public IntellijIdeInfo.JsIdeInfo toProto() {
+    return IntellijIdeInfo.JsIdeInfo.newBuilder()
+        .addAllSources(ProtoWrapper.mapToProtos(sources))
+        .build();
+  }
+
+  public ImmutableList<ArtifactLocation> getSources() {
+    return sources;
   }
 
   public static Builder builder() {
@@ -48,6 +62,23 @@ public class JsIdeInfo implements Serializable {
 
   @Override
   public String toString() {
-    return "JsIdeInfo{" + "\n" + "  sources=" + sources + "\n" + '}';
+    return "JsIdeInfo{" + "\n" + "  sources=" + getSources() + "\n" + '}';
+  }
+
+  @Override
+  public boolean equals(Object o) {
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
+    JsIdeInfo jsIdeInfo = (JsIdeInfo) o;
+    return Objects.equals(sources, jsIdeInfo.sources);
+  }
+
+  @Override
+  public int hashCode() {
+    return Objects.hash(sources);
   }
 }

@@ -62,14 +62,14 @@ class DeployableJarRunConfigurationProducer
       return false;
     }
 
-    Label label = target.key.label;
+    Label label = target.getKey().getLabel();
     File jarFile = getDeployJarFile(label, context.getProject());
     if (jarFile == null) {
       return false;
     }
 
     configuration.setVMParameters("-cp " + jarFile.getPath());
-    configuration.setMainClassName(mainObject.getTruncedQualifiedName());
+    configuration.setMainClassName(mainObject.qualifiedName());
     configuration.setModule(context.getModule());
 
     configuration.putUserData(TARGET_LABEL, label);
@@ -99,12 +99,12 @@ class DeployableJarRunConfigurationProducer
     if (target == null) {
       return false;
     }
-    Label label = target.key.label;
+    Label label = target.getKey().getLabel();
     File jarFile = getDeployJarFile(label, context.getProject());
     if (jarFile == null) {
       return false;
     }
-    return mainClass.getQualifiedName().equals(mainObject.getTruncedQualifiedName())
+    return mainClass.getQualifiedName().equals(mainObject.qualifiedName())
         && configuration.getVMParameters().contains("-cp " + jarFile.getPath());
   }
 
@@ -134,7 +134,7 @@ class DeployableJarRunConfigurationProducer
     if (projectData == null) {
       return null;
     }
-    File blazeBin = projectData.blazeInfo.getBlazeBinDirectory();
+    File blazeBin = projectData.getBlazeInfo().getBlazeBinDirectory();
     return new File(blazeBin, String.format("%s_deploy.jar", target.targetName()));
   }
 }
