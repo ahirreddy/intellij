@@ -16,9 +16,8 @@
 package com.google.idea.blaze.base.command.buildresult;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableListMultimap;
 import com.google.idea.blaze.base.model.primitives.Label;
-import java.io.File;
-import java.util.Collection;
 import java.util.List;
 
 /** Assists in getting build artifacts from a build operation. */
@@ -32,23 +31,37 @@ public interface BuildResultHelper extends AutoCloseable {
   List<String> getBuildFlags();
 
   /**
-   * Returns the build result. May only be called once the build is complete, or no artifacts will
-   * be returned.
+   * Returns the build result. May only be called once, after the build is complete, or no artifacts
+   * will be returned.
    *
    * @return The build artifacts from the build operation.
    */
-  ImmutableList<File> getBuildArtifacts() throws GetArtifactsException;
+  ImmutableList<OutputArtifact> getBuildArtifacts() throws GetArtifactsException;
 
   /**
-   * Returns the build artifacts, attempting to filter out all artifacts not directly produced by
-   * the specified target. Some implementations may return artifacts produced by other targets.
+   * Returns the build artifacts, filtering out all artifacts not directly produced by the specified
+   * target.
    *
-   * <p>May only be called once the build is complete, or no artifacts will be returned.
+   * <p>May only be called once, after the build is complete, or no artifacts will be returned.
    */
-  ImmutableList<File> getBuildArtifactsForTarget(Label target) throws GetArtifactsException;
+  ImmutableList<OutputArtifact> getBuildArtifactsForTarget(Label target)
+      throws GetArtifactsException;
 
-  /** Returns all build artifacts belonging to the given output groups. */
-  ImmutableList<File> getArtifactsForOutputGroups(Collection<String> outputGroups)
+  /**
+   * Returns all build artifacts belonging to the given output groups. May only be called once,
+   * after the build is complete, or no artifacts will be returned.
+   */
+  default ImmutableList<OutputArtifact> getArtifactsForOutputGroup(String outputGroup)
+      throws GetArtifactsException {
+    return getPerOutputGroupArtifacts().get(outputGroup);
+  }
+
+  /**
+   * Returns all build artifacts split by output group (note artifacts may belong to multiple output
+   * groups). May only be called once, after the build is complete, or no artifacts will be
+   * returned.
+   */
+  ImmutableListMultimap<String, OutputArtifact> getPerOutputGroupArtifacts()
       throws GetArtifactsException;
 
   @Override

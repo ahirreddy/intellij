@@ -17,15 +17,15 @@ package com.google.idea.blaze.java.fastbuild;
 
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.collect.ImmutableMap.toImmutableMap;
+import static com.google.common.util.concurrent.MoreExecutors.directExecutor;
 
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSetMultimap;
+import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
-import com.google.common.util.concurrent.MoreExecutors;
 import com.google.idea.blaze.base.async.executor.ProgressiveTaskWithProgressIndicator;
 import com.google.idea.blaze.base.async.process.ExternalTask;
 import com.google.idea.blaze.base.async.process.LineProcessingOutputStream;
@@ -36,8 +36,8 @@ import com.google.idea.blaze.base.command.BlazeInvocationContext;
 import com.google.idea.blaze.base.command.buildresult.BuildResultHelper;
 import com.google.idea.blaze.base.command.buildresult.BuildResultHelper.GetArtifactsException;
 import com.google.idea.blaze.base.command.buildresult.BuildResultHelperProvider;
+import com.google.idea.blaze.base.command.buildresult.LocalFileOutputArtifact;
 import com.google.idea.blaze.base.console.BlazeConsoleLineProcessorProvider;
-import com.google.idea.blaze.base.issueparser.IssueOutputFilter;
 import com.google.idea.blaze.base.model.primitives.Kind;
 import com.google.idea.blaze.base.model.primitives.Label;
 import com.google.idea.blaze.base.model.primitives.WorkspaceRoot;
@@ -48,57 +48,48 @@ import com.google.idea.blaze.base.run.ExecutorType;
 import com.google.idea.blaze.base.scope.BlazeContext;
 import com.google.idea.blaze.base.scope.ScopedTask;
 import com.google.idea.blaze.base.scope.output.StatusOutput;
-import com.google.idea.blaze.base.scope.scopes.BlazeConsoleScope;
-import com.google.idea.blaze.base.scope.scopes.IssuesScope;
-import com.google.idea.blaze.base.settings.BlazeUserSettings;
-import com.google.idea.blaze.base.settings.BlazeUserSettings.FocusBehavior;
 import com.google.idea.blaze.base.settings.BuildSystem;
 import com.google.idea.blaze.base.sync.aspects.BuildResult;
 import com.google.idea.blaze.base.sync.aspects.BuildResult.Status;
 import com.google.idea.blaze.base.sync.data.BlazeProjectDataManager;
+import com.google.idea.blaze.java.AndroidBlazeRules;
+import com.google.idea.blaze.java.JavaBlazeRules;
+import com.google.idea.blaze.java.fastbuild.FastBuildChangedFilesService.ChangedSources;
+import com.google.idea.blaze.java.fastbuild.FastBuildLogDataScope.FastBuildLogOutput;
 import com.google.idea.blaze.java.fastbuild.FastBuildState.BuildOutput;
 import com.google.idea.common.concurrency.ConcurrencyUtil;
-import com.intellij.openapi.application.ModalityState;
 import com.intellij.openapi.components.ProjectComponent;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.util.io.FileUtil;
-import com.intellij.openapi.vcs.changes.ChangeListManager;
-import com.intellij.openapi.vcs.changes.ContentRevision;
-import com.intellij.openapi.vcs.changes.InvokeAfterUpdateMode;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Stream;
 import javax.annotation.Nullable;
 
 final class FastBuildServiceImpl implements FastBuildService, ProjectComponent {
 
   private static final ImmutableSetMultimap<BuildSystem, Kind> SUPPORTED_KINDS =
       ImmutableSetMultimap.<BuildSystem, Kind>builder()
-          .putAll(BuildSystem.Bazel, Kind.JAVA_TEST)
+          .putAll(BuildSystem.Bazel, JavaBlazeRules.RuleTypes.JAVA_TEST.getKind())
           .putAll(
               BuildSystem.Blaze,
-              Kind.ANDROID_ROBOLECTRIC_TEST,
-              Kind.ANDROID_LOCAL_TEST,
-              Kind.JAVA_TEST)
+              AndroidBlazeRules.RuleTypes.ANDROID_ROBOLECTRIC_TEST.getKind(),
+              AndroidBlazeRules.RuleTypes.ANDROID_LOCAL_TEST.getKind(),
+              JavaBlazeRules.RuleTypes.JAVA_TEST.getKind())
           .build();
 
   private final Project project;
   private final ProjectViewManager projectViewManager;
   private final BlazeProjectDataManager projectDataManager;
-  private final ChangeListManager changeListManager;
   private final FastBuildIncrementalCompiler incrementalCompiler;
+  private final FastBuildChangedFilesService changedFilesManager;
+  private final Thread shutdownHook;
 
   private final ConcurrentHashMap<Label, FastBuildState> builds;
 
@@ -106,14 +97,15 @@ final class FastBuildServiceImpl implements FastBuildService, ProjectComponent {
       Project project,
       ProjectViewManager projectViewManager,
       BlazeProjectDataManager projectDataManager,
-      ChangeListManager changeListManager,
-      FastBuildIncrementalCompiler incrementalCompiler) {
+      FastBuildIncrementalCompiler incrementalCompiler,
+      FastBuildChangedFilesService changedFilesManager) {
     this.project = project;
     this.projectViewManager = projectViewManager;
     this.projectDataManager = projectDataManager;
-    this.changeListManager = changeListManager;
     this.incrementalCompiler = incrementalCompiler;
+    this.changedFilesManager = changedFilesManager;
     this.builds = new ConcurrentHashMap<>();
+    this.shutdownHook = new Thread(this::resetBuilds);
   }
 
   @Override
@@ -126,22 +118,21 @@ final class FastBuildServiceImpl implements FastBuildService, ProjectComponent {
     FastBuildState build = builds.remove(label);
     if (build != null) {
       FileUtil.delete(build.compilerOutputDirectory());
+      changedFilesManager.resetBuild(label);
     }
   }
 
   @Override
   public Future<FastBuildInfo> createBuild(
-      Label label, String blazeBinaryPath, List<String> blazeFlags) throws FastBuildException {
-
-    // Use a LinkedHashMap so that we preserve the order of the entries.
-    Map<String, String> loggingData = new LinkedHashMap<>();
+      BlazeContext context, Label label, String blazeBinaryPath, List<String> blazeFlags)
+      throws FastBuildException {
 
     try {
       FastBuildParameters buildParameters = generateBuildParameters(blazeBinaryPath, blazeFlags);
       FastBuildState buildState =
           builds.compute(
               label,
-              (unused, buildInfo) -> updateBuild(label, buildParameters, buildInfo, loggingData));
+              (unused, buildInfo) -> updateBuild(context, label, buildParameters, buildInfo));
       return Futures.transform(
           buildState.newBuildOutput(),
           buildOutput ->
@@ -149,9 +140,8 @@ final class FastBuildServiceImpl implements FastBuildService, ProjectComponent {
                   label,
                   buildOutput.deployJar(),
                   ImmutableList.of(buildState.compilerOutputDirectory(), buildOutput.deployJar()),
-                  buildOutput.blazeData(),
-                  loggingData),
-          MoreExecutors.directExecutor());
+                  buildOutput.blazeData()),
+          directExecutor());
     } catch (FastBuildTunnelException e) {
       throw e.asFastBuildException();
     }
@@ -181,40 +171,35 @@ final class FastBuildServiceImpl implements FastBuildService, ProjectComponent {
   }
 
   private FastBuildState updateBuild(
+      BlazeContext context,
       Label label,
       FastBuildParameters buildParameters,
-      @Nullable FastBuildState existingBuildState,
-      Map<String, String> loggingData) {
+      @Nullable FastBuildState existingBuildState) {
 
-    loggingData.put("label", label.toString());
+    context.output(FastBuildLogOutput.keyValue("label", label.toString()));
 
     if (existingBuildState != null && !existingBuildState.newBuildOutput().isDone()) {
       // Don't start a new build if an existing one is still running.
-      loggingData.put("reused_existing_build_future", "true");
+      context.output(FastBuildLogOutput.keyValue("reused_existing_build_future", "true"));
       return existingBuildState;
     }
 
     BuildOutput completedBuildOutput = getCompletedBuild(existingBuildState);
+    ChangedSources changedSources = ChangedSources.fullCompile();
+    if (completedBuildOutput != null) {
+      changedSources = changedFilesManager.getAndResetChangedSources(label);
+    }
 
-    Stopwatch timer = Stopwatch.createStarted();
-    Set<File> modifiedFiles = getVcsModifiedFiles();
-    loggingData.put(
-        "retrieve_modified_files_time_ms", Long.toString(timer.elapsed(TimeUnit.MILLISECONDS)));
-
-    if (completedBuildOutput == null) {
+    if (changedSources.needsFullCompile()) {
       File compileDirectory = getCompilerOutputDirectory(existingBuildState);
-      return FastBuildState.create(
-          buildDeployJar(label, buildParameters, loggingData),
-          compileDirectory,
-          buildParameters,
-          modifiedFiles);
+      ListenableFuture<BuildOutput> newBuildOutput =
+          buildDeployJar(context, label, buildParameters);
+      changedFilesManager.newBuild(label, newBuildOutput);
+      return FastBuildState.create(newBuildOutput, compileDirectory, buildParameters);
     } else {
-      existingBuildState =
-          existingBuildState
-              .withAdditionalModifiedFiles(modifiedFiles)
-              .withCompletedBuildOutput(completedBuildOutput);
-      return existingBuildState.withNewBuildOutput(
-          incrementalCompiler.compile(label, existingBuildState, loggingData));
+      existingBuildState = existingBuildState.withCompletedBuildOutput(completedBuildOutput);
+      return performIncrementalCompilation(
+          context, label, existingBuildState, changedSources.changedSources());
     }
   }
 
@@ -231,25 +216,6 @@ final class FastBuildServiceImpl implements FastBuildService, ProjectComponent {
     } catch (IOException e) {
       throw new FastBuildTunnelException(e);
     }
-  }
-
-  private Set<File> getVcsModifiedFiles() {
-    Set<File> modifiedPaths = new HashSet<>();
-    changeListManager.invokeAfterUpdate(
-        () -> addAllModifiedPaths(modifiedPaths),
-        InvokeAfterUpdateMode.SYNCHRONOUS_CANCELLABLE,
-        "Retrieving list of modified files",
-        ModalityState.NON_MODAL);
-    return modifiedPaths;
-  }
-
-  private void addAllModifiedPaths(Set<File> modifiedPaths) {
-    changeListManager.getAllChanges().stream()
-        .flatMap(change -> Stream.of(change.getBeforeRevision(), change.getAfterRevision()))
-        .filter(Objects::nonNull)
-        .map(ContentRevision::getFile)
-        .filter(filePath -> !filePath.isNonLocal() && !filePath.isDirectory())
-        .forEach(filePath -> modifiedPaths.add(filePath.getIOFile()));
   }
 
   @Nullable
@@ -274,15 +240,10 @@ final class FastBuildServiceImpl implements FastBuildService, ProjectComponent {
   }
 
   private ListenableFuture<FastBuildState.BuildOutput> buildDeployJar(
-      Label label, FastBuildParameters buildParameters, Map<String, String> loggingData) {
+      BlazeContext context, Label label, FastBuildParameters buildParameters) {
 
     Label deployJarLabel = createDeployJarLabel(label);
     WorkspaceRoot workspaceRoot = WorkspaceRoot.fromProject(project);
-
-    // TODO(plumpy): this assumes we're running this build as part of a run action. I try not to
-    // make that assumption anywhere else, so this should be supplied by the caller.
-    FocusBehavior consolePopupBehavior = BlazeUserSettings.getInstance().getShowBlazeConsoleOnRun();
-    FocusBehavior problemsViewFocus = BlazeUserSettings.getInstance().getShowProblemsViewOnRun();
 
     FastBuildAspectStrategy aspectStrategy =
         FastBuildAspectStrategy.getInstance(
@@ -300,22 +261,9 @@ final class FastBuildServiceImpl implements FastBuildService, ProjectComponent {
     ListenableFuture<BuildResult> buildResultFuture =
         ProgressiveTaskWithProgressIndicator.builder(project, "Building deploy jar for fast builds")
             .submitTaskWithResult(
-                new ScopedTask<BuildResult>() {
+                new ScopedTask<BuildResult>(context) {
                   @Override
                   protected BuildResult execute(BlazeContext context) {
-                    context
-                        .push(new IssuesScope(project, problemsViewFocus))
-                        .push(
-                            new BlazeConsoleScope.Builder(project)
-                                .setPopupBehavior(consolePopupBehavior)
-                                .addConsoleFilters(
-                                    new IssueOutputFilter(
-                                        project,
-                                        workspaceRoot,
-                                        BlazeInvocationContext.ContextType.RunConfiguration,
-                                        true))
-                                .build());
-
                     context.output(
                         new StatusOutput(
                             "Building base deploy jar for fast builds: "
@@ -329,7 +277,7 @@ final class FastBuildServiceImpl implements FastBuildService, ProjectComponent {
                             .addBlazeFlags(buildResultHelper.getBuildFlags());
 
                     aspectStrategy.addAspectAndOutputGroups(
-                        command, /* additionalOutputGroups */ "default");
+                        command, /* additionalOutputGroups= */ "default");
 
                     timer.start();
                     int exitCode =
@@ -345,25 +293,28 @@ final class FastBuildServiceImpl implements FastBuildService, ProjectComponent {
                     return BuildResult.fromExitCode(exitCode);
                   }
                 });
+
     ListenableFuture<BuildOutput> buildOutputFuture =
         Futures.transform(
             buildResultFuture,
             result -> {
-              loggingData.put("deploy_jar_build_result", result.status.toString());
-              loggingData.put(
-                  "deploy_jar_build_time_ms", Long.toString(timer.elapsed(TimeUnit.MILLISECONDS)));
+              context.output(
+                  FastBuildLogOutput.keyValue("deploy_jar_build_result", result.status.toString()));
+              context.output(FastBuildLogOutput.milliseconds("deploy_jar_build_time_ms", timer));
               if (result.status != Status.SUCCESS) {
                 throw new RuntimeException("Blaze failure building deploy jar");
               }
               try {
                 ImmutableList<File> deployJarArtifacts =
-                    buildResultHelper.getBuildArtifactsForTarget(deployJarLabel);
+                    LocalFileOutputArtifact.getLocalOutputFiles(
+                        buildResultHelper.getBuildArtifactsForTarget(deployJarLabel));
                 checkState(deployJarArtifacts.size() == 1);
                 File deployJar = deployJarArtifacts.get(0);
 
                 ImmutableList<File> ideInfoFiles =
-                    buildResultHelper.getArtifactsForOutputGroups(
-                        ImmutableSet.of(aspectStrategy.getAspectOutputGroup()));
+                    LocalFileOutputArtifact.getLocalOutputFiles(
+                        buildResultHelper.getArtifactsForOutputGroup(
+                            aspectStrategy.getAspectOutputGroup()));
 
                 ImmutableMap<Label, FastBuildBlazeData> blazeData =
                     ideInfoFiles.stream()
@@ -384,6 +335,36 @@ final class FastBuildServiceImpl implements FastBuildService, ProjectComponent {
     return Label.create(label + "_deploy.jar");
   }
 
+  private FastBuildState performIncrementalCompilation(
+      BlazeContext context,
+      Label label,
+      FastBuildState existingBuildState,
+      Set<File> modifiedFiles) {
+
+    ListenableFuture<BuildOutput> compilationResult =
+        incrementalCompiler.compile(context, label, existingBuildState, modifiedFiles);
+    Futures.addCallback(
+        compilationResult,
+        new FutureCallback<BuildOutput>() {
+          @Override
+          public void onSuccess(BuildOutput result) {}
+
+          @Override
+          public void onFailure(Throwable t) {
+            // We want to unconditionally try to recompile these files, even if they haven't changed
+            // again. It's sort of silly, but otherwise you get into this situation:
+            // 1. Compile a successful build and run tests.
+            // 2. Add a syntax error to a file
+            // 3. Recompile; compilation fails.
+            // 4. Run fast build again immediately. No files have changed, so compilation is
+            //    skipped. The tests will run and pass, despite the syntax error.
+            changedFilesManager.addFilesFromFailedCompilation(label, modifiedFiles);
+          }
+        },
+        directExecutor());
+    return existingBuildState.withNewBuildOutput(compilationResult);
+  }
+
   private static class FastBuildTunnelException extends RuntimeException {
 
     FastBuildTunnelException(Throwable cause) {
@@ -400,11 +381,16 @@ final class FastBuildServiceImpl implements FastBuildService, ProjectComponent {
 
   @Override
   public void projectOpened() {
-    Runtime.getRuntime().addShutdownHook(new Thread(this::projectClosed));
+    Runtime.getRuntime().addShutdownHook(shutdownHook);
   }
 
   @Override
   public void projectClosed() {
+    Runtime.getRuntime().removeShutdownHook(shutdownHook);
+    resetBuilds();
+  }
+
+  private void resetBuilds() {
     builds.keySet().forEach(this::resetBuild);
   }
 }

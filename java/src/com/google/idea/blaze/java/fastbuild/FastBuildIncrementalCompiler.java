@@ -17,8 +17,10 @@ package com.google.idea.blaze.java.fastbuild;
 
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.idea.blaze.base.model.primitives.Label;
+import com.google.idea.blaze.base.scope.BlazeContext;
 import com.google.idea.blaze.java.fastbuild.FastBuildState.BuildOutput;
-import java.util.Map;
+import java.io.File;
+import java.util.Set;
 
 /**
  * Given a base deploy jar and some target, perform a series of javac compilations that allows an
@@ -31,5 +33,5 @@ interface FastBuildIncrementalCompiler {
    * {@code buildState} must be present.
    */
   ListenableFuture<BuildOutput> compile(
-      Label label, FastBuildState buildState, Map<String, String> loggingData);
+      BlazeContext context, Label label, FastBuildState buildState, Set<File> modifiedFiles);
 }

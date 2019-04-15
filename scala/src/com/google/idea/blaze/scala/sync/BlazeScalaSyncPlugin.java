@@ -16,7 +16,6 @@
 package com.google.idea.blaze.scala.sync;
 
 import com.google.common.collect.ImmutableSet;
-import com.google.idea.blaze.base.command.info.BlazeInfo;
 import com.google.idea.blaze.base.ideinfo.TargetMap;
 import com.google.idea.blaze.base.model.BlazeProjectData;
 import com.google.idea.blaze.base.model.BlazeVersionData;
@@ -29,16 +28,16 @@ import com.google.idea.blaze.base.scope.BlazeContext;
 import com.google.idea.blaze.base.scope.Scope;
 import com.google.idea.blaze.base.scope.scopes.TimingScope;
 import com.google.idea.blaze.base.scope.scopes.TimingScope.EventType;
-import com.google.idea.blaze.base.sync.BlazeSyncParams.SyncMode;
 import com.google.idea.blaze.base.sync.BlazeSyncPlugin;
+import com.google.idea.blaze.base.sync.SyncMode;
 import com.google.idea.blaze.base.sync.libraries.LibrarySource;
 import com.google.idea.blaze.base.sync.projectview.WorkspaceLanguageSettings;
 import com.google.idea.blaze.base.sync.workspace.ArtifactLocationDecoder;
 import com.google.idea.blaze.base.sync.workspace.WorkingSet;
-import com.google.idea.blaze.base.sync.workspace.WorkspacePathResolver;
 import com.google.idea.blaze.scala.sync.importer.BlazeScalaWorkspaceImporter;
 import com.google.idea.blaze.scala.sync.model.BlazeScalaImportResult;
 import com.google.idea.blaze.scala.sync.model.BlazeScalaSyncData;
+import com.google.idea.sdkcompat.scala.ScalaLibraryTypeCompat;
 import com.intellij.openapi.module.Module;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.roots.ModifiableRootModel;
@@ -47,7 +46,6 @@ import com.intellij.openapi.roots.libraries.Library;
 import com.intellij.openapi.roots.ui.configuration.libraryEditor.ExistingLibraryEditor;
 import java.util.Set;
 import javax.annotation.Nullable;
-import org.jetbrains.plugins.scala.project.ScalaLibraryType;
 
 /** Supports scala. */
 public class BlazeScalaSyncPlugin implements BlazeSyncPlugin {
@@ -80,7 +78,7 @@ public class BlazeScalaSyncPlugin implements BlazeSyncPlugin {
       if (library.getName() != null && library.getName().contains("scala-library")
           && library.getName().contains("org.scala-lang")) {
         ExistingLibraryEditor editor = new ExistingLibraryEditor(library, null);
-        editor.setType(ScalaLibraryType.instance());
+        editor.setType(ScalaLibraryTypeCompat.getScalaLibraryType());
         editor.commit();
         return;
       }
@@ -94,10 +92,8 @@ public class BlazeScalaSyncPlugin implements BlazeSyncPlugin {
       WorkspaceRoot workspaceRoot,
       ProjectViewSet projectViewSet,
       WorkspaceLanguageSettings workspaceLanguageSettings,
-      BlazeInfo blazeInfo,
       BlazeVersionData blazeVersionData,
       @Nullable WorkingSet workingSet,
-      WorkspacePathResolver workspacePathResolver,
       ArtifactLocationDecoder artifactLocationDecoder,
       TargetMap targetMap,
       SyncState.Builder syncStateBuilder,

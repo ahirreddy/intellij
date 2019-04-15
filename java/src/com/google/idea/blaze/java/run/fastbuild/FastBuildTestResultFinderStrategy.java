@@ -18,41 +18,47 @@ package com.google.idea.blaze.java.run.fastbuild;
 import com.google.common.base.Stopwatch;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import com.google.idea.blaze.base.command.buildresult.LocalFileOutputArtifact;
 import com.google.idea.blaze.base.model.primitives.Kind;
 import com.google.idea.blaze.base.model.primitives.Label;
 import com.google.idea.blaze.base.run.testlogs.BlazeTestResult;
 import com.google.idea.blaze.base.run.testlogs.BlazeTestResult.TestStatus;
 import com.google.idea.blaze.base.run.testlogs.BlazeTestResultFinderStrategy;
 import com.google.idea.blaze.base.run.testlogs.BlazeTestResults;
-import com.google.idea.blaze.java.run.fastbuild.FastBuildConfigurationRunner.FastBuildLoggingData;
+import com.google.idea.blaze.base.scope.BlazeContext;
+import com.google.idea.blaze.java.fastbuild.FastBuildLogDataScope.FastBuildLogOutput;
 import java.io.File;
-import java.util.concurrent.TimeUnit;
 
 final class FastBuildTestResultFinderStrategy implements BlazeTestResultFinderStrategy {
 
   private final Label label;
   private final Kind kind;
   private final File outputFile;
-  private final FastBuildLoggingData loggingData;
+  private final BlazeContext blazeContext;
   private final Stopwatch timer;
 
   FastBuildTestResultFinderStrategy(
-      Label label, Kind kind, File outputFile, FastBuildLoggingData loggingData) {
+      Label label, Kind kind, File outputFile, BlazeContext blazeContext) {
     this.label = label;
     this.kind = kind;
     this.outputFile = outputFile;
-    this.loggingData = loggingData;
+    this.blazeContext = blazeContext;
     this.timer = Stopwatch.createStarted();
   }
 
   @Override
   public BlazeTestResults findTestResults() {
-    loggingData.put("run_test_class_time_ms", Long.toString(timer.elapsed(TimeUnit.MILLISECONDS)));
-    loggingData.writeLog();
+    blazeContext.output(FastBuildLogOutput.milliseconds("run_test_class_time_ms", timer));
+    // This is the very last interaction we have with the test runner framework, so end the scope
+    // here (which writes out the log data).
+    blazeContext.endScope();
     return BlazeTestResults.fromFlatList(
         ImmutableList.of(
             BlazeTestResult.create(
-                label, kind, TestStatus.NO_STATUS, ImmutableSet.of(outputFile))));
+                label,
+                kind,
+                TestStatus.NO_STATUS,
+                ImmutableSet.of(new LocalFileOutputArtifact(outputFile)))));
   }
 
   @Override

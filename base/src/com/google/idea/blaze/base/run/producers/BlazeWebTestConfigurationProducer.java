@@ -21,7 +21,7 @@ import com.google.idea.blaze.base.ideinfo.TargetIdeInfo;
 import com.google.idea.blaze.base.ideinfo.TargetKey;
 import com.google.idea.blaze.base.ideinfo.TargetMap;
 import com.google.idea.blaze.base.model.BlazeProjectData;
-import com.google.idea.blaze.base.model.primitives.Kind;
+import com.google.idea.blaze.base.model.primitives.GenericBlazeRules;
 import com.google.idea.blaze.base.model.primitives.Label;
 import com.google.idea.blaze.base.model.primitives.TargetExpression;
 import com.google.idea.blaze.base.run.BlazeCommandRunConfiguration;
@@ -49,17 +49,14 @@ import javax.swing.ListSelectionModel;
  *
  * <p>Pops up a dialog to choose a specific browser/platform if multiple are declared.
  */
-public abstract class BlazeWebTestConfigurationProducer
+public class BlazeWebTestConfigurationProducer
     extends BlazeRunConfigurationProducer<BlazeCommandRunConfiguration> {
-  private final ImmutableList<
-          Class<? extends BlazeRunConfigurationProducer<BlazeCommandRunConfiguration>>>
-      producers;
 
-  protected BlazeWebTestConfigurationProducer(
-      ImmutableList<Class<? extends BlazeRunConfigurationProducer<BlazeCommandRunConfiguration>>>
-          producers) {
+  private final TestContextRunConfigurationProducer delegate;
+
+  private BlazeWebTestConfigurationProducer() {
     super(BlazeCommandRunConfigurationType.getInstance());
-    this.producers = producers;
+    delegate = new TestContextRunConfigurationProducer(true);
   }
 
   @Override
@@ -67,10 +64,7 @@ public abstract class BlazeWebTestConfigurationProducer
       BlazeCommandRunConfiguration configuration,
       ConfigurationContext context,
       Ref<PsiElement> sourceElement) {
-    if (producers.stream()
-        .map(EP_NAME::findExtension)
-        .noneMatch(
-            producer -> producer.doSetupConfigFromContext(configuration, context, sourceElement))) {
+    if (!delegate.doSetupConfigFromContext(configuration, context, sourceElement)) {
       return false;
     }
 
@@ -90,21 +84,20 @@ public abstract class BlazeWebTestConfigurationProducer
 
     // Wrong kind to prevent the language-specific debug runner from interfering.
     // The target will be updated to match the kind at the end.
-    configuration.setTargetInfo(TargetInfo.builder(label, Kind.WEB_TEST.toString()).build());
+    configuration.setTargetInfo(
+        TargetInfo.builder(label, GenericBlazeRules.RuleTypes.WEB_TEST.toString()).build());
     return ReverseDependencyMap.get(project).get(TargetKey.forPlainTarget(label)).stream()
         .map(targetMap::get)
         .filter(Objects::nonNull)
         .map(TargetIdeInfo::getKind)
-        .anyMatch(kind -> kind == Kind.WEB_TEST);
+        .anyMatch(kind -> kind == GenericBlazeRules.RuleTypes.WEB_TEST.getKind());
   }
 
   @Override
   protected boolean doIsConfigFromContext(
       BlazeCommandRunConfiguration configuration, ConfigurationContext context) {
-    return producers.stream()
-            .map(EP_NAME::findExtension)
-            .anyMatch(producer -> producer.doIsConfigFromContext(configuration, context))
-        && configuration.getTargetKind() == Kind.WEB_TEST;
+    return delegate.doIsConfigFromContext(configuration, context)
+        && configuration.getTargetKind() == GenericBlazeRules.RuleTypes.WEB_TEST.getKind();
   }
 
   @Override
@@ -142,7 +135,7 @@ public abstract class BlazeWebTestConfigurationProducer
     return ReverseDependencyMap.get(project).get(TargetKey.forPlainTarget(wrappedTest)).stream()
         .map(targetMap::get)
         .filter(Objects::nonNull)
-        .filter(t -> t.getKind() == Kind.WEB_TEST)
+        .filter(t -> t.getKind() == GenericBlazeRules.RuleTypes.WEB_TEST.getKind())
         .map(TargetIdeInfo::getKey)
         .map(TargetKey::getLabel)
         .sorted()
@@ -203,6 +196,7 @@ public abstract class BlazeWebTestConfigurationProducer
 
   @Override
   public boolean shouldReplace(ConfigurationFromContext self, ConfigurationFromContext other) {
-    return producers.stream().anyMatch(other::isProducedBy);
+    return super.shouldReplace(self, other)
+        || other.isProducedBy(TestContextRunConfigurationProducer.class);
   }
 }

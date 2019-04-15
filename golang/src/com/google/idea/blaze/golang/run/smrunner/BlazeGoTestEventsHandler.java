@@ -17,6 +17,7 @@ package com.google.idea.blaze.golang.run.smrunner;
 
 import com.goide.psi.GoFunctionOrMethodDeclaration;
 import com.google.idea.blaze.base.command.BlazeFlags;
+import com.google.idea.blaze.base.execution.BlazeParametersListUtil;
 import com.google.idea.blaze.base.model.primitives.Kind;
 import com.google.idea.blaze.base.model.primitives.Label;
 import com.google.idea.blaze.base.model.primitives.LanguageClass;
@@ -36,8 +37,8 @@ public class BlazeGoTestEventsHandler implements BlazeTestEventsHandler {
   @Override
   public boolean handlesKind(@Nullable Kind kind) {
     return kind != null
-        && kind.languageClass.equals(LanguageClass.GO)
-        && kind.ruleType.equals(RuleType.TEST);
+        && kind.getLanguageClass().equals(LanguageClass.GO)
+        && kind.getRuleType().equals(RuleType.TEST);
   }
 
   @Override
@@ -56,7 +57,10 @@ public class BlazeGoTestEventsHandler implements BlazeTestEventsHandler {
             .map(name -> "^" + name + "$")
             .reduce((a, b) -> a + "|" + b)
             .orElse(null);
-    return filter != null ? String.format("%s=%s", BlazeFlags.TEST_FILTER, filter) : null;
+    return filter != null
+        ? String.format(
+            "%s=%s", BlazeFlags.TEST_FILTER, BlazeParametersListUtil.encodeParam(filter))
+        : null;
   }
 
   @Override

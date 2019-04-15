@@ -43,6 +43,7 @@ import com.google.idea.blaze.base.model.primitives.Kind;
 import com.google.idea.blaze.base.model.primitives.Label;
 import com.google.idea.blaze.base.sync.data.BlazeProjectDataManager;
 import com.google.idea.blaze.base.sync.workspace.ArtifactLocationDecoder;
+import com.google.idea.blaze.base.sync.workspace.MockArtifactLocationDecoder;
 import com.google.idea.common.experiments.ExperimentService;
 import com.google.idea.common.experiments.MockExperimentService;
 import com.intellij.facet.FacetManager;
@@ -85,7 +86,12 @@ public class BlazeClassJarProviderIntegrationTest extends BlazeIntegrationTestCa
     module = testFixture.getModule();
 
     ArtifactLocationDecoder decoder =
-        (location) -> new File("/src", location.getExecutionRootRelativePath());
+        new MockArtifactLocationDecoder() {
+          @Override
+          public File decode(ArtifactLocation artifactLocation) {
+            return new File("/src", artifactLocation.getExecutionRootRelativePath());
+          }
+        };
 
     BlazeProjectData blazeProjectData =
         MockBlazeProjectDataBuilder.builder(workspaceRoot)
@@ -275,8 +281,7 @@ public class BlazeClassJarProviderIntegrationTest extends BlazeIntegrationTestCa
     ResourceClassRegistry registry = ResourceClassRegistry.get(getProject());
     AndroidFacet facet = AndroidFacet.getInstance(module);
     assertThat(facet).isNotNull();
-    ResourceRepositoryManager repositoryManager =
-        ResourceRepositoryManager.getOrCreateInstance(facet);
+    ResourceRepositoryManager repositoryManager = ResourceRepositoryManager.getInstance(facet);
     assertThat(repositoryManager).isNotNull();
     assertThat(registry.findClassDefinition("com.google.example.resource.R", repositoryManager))
         .isNotNull();
@@ -427,7 +432,7 @@ public class BlazeClassJarProviderIntegrationTest extends BlazeIntegrationTestCa
         .addTarget(
             TargetIdeInfo.builder()
                 .setLabel(mainResourceLibrary)
-                .setKind(Kind.ANDROID_LIBRARY)
+                .setKind(Kind.fromRuleName("android_library"))
                 .setJavaInfo(
                     javaInfoWithJars(
                         "com/google/example/libmain.jar", "com/google/example/main_resources.jar"))
@@ -444,13 +449,13 @@ public class BlazeClassJarProviderIntegrationTest extends BlazeIntegrationTestCa
         .addTarget(
             TargetIdeInfo.builder()
                 .setLabel(androidDependency)
-                .setKind(Kind.ANDROID_LIBRARY)
+                .setKind(Kind.fromRuleName("android_library"))
                 .setJavaInfo(javaInfoWithJars("com/google/example/libandroid.jar"))
                 .addDependency(transitiveResourceDependency))
         .addTarget(
             TargetIdeInfo.builder()
                 .setLabel(resourceDependency)
-                .setKind(Kind.ANDROID_LIBRARY)
+                .setKind(Kind.fromRuleName("android_library"))
                 .setJavaInfo(
                     javaInfoWithJars(
                         "com/google/example/resource.jar",
@@ -463,7 +468,7 @@ public class BlazeClassJarProviderIntegrationTest extends BlazeIntegrationTestCa
         .addTarget(
             TargetIdeInfo.builder()
                 .setLabel(resourceDependency2)
-                .setKind(Kind.ANDROID_LIBRARY)
+                .setKind(Kind.fromRuleName("android_library"))
                 .setJavaInfo(
                     javaInfoWithJars(
                         "com/google/example/resource2.jar",
@@ -476,7 +481,7 @@ public class BlazeClassJarProviderIntegrationTest extends BlazeIntegrationTestCa
         .addTarget(
             TargetIdeInfo.builder()
                 .setLabel(transitiveResourceDependency)
-                .setKind(Kind.ANDROID_LIBRARY)
+                .setKind(Kind.fromRuleName("android_library"))
                 .setJavaInfo(
                     javaInfoWithJars(
                         "com/google/example/transitive/resource.jar",
@@ -489,7 +494,7 @@ public class BlazeClassJarProviderIntegrationTest extends BlazeIntegrationTestCa
         .addTarget(
             TargetIdeInfo.builder()
                 .setLabel(javaDependency)
-                .setKind(Kind.JAVA_LIBRARY)
+                .setKind(Kind.fromRuleName("java_library"))
                 .setJavaInfo(javaInfoWithJars("com/google/example/libjava.jar"))
                 .addDependency(transitiveJavaDependency)
                 .addDependency(sharedJavaDependency)
@@ -498,30 +503,30 @@ public class BlazeClassJarProviderIntegrationTest extends BlazeIntegrationTestCa
         .addTarget(
             TargetIdeInfo.builder()
                 .setLabel(transitiveJavaDependency)
-                .setKind(Kind.JAVA_LIBRARY)
+                .setKind(Kind.fromRuleName("java_library"))
                 .setJavaInfo(javaInfoWithJars("com/google/example/libtransitive.jar"))
                 .addDependency(sharedJavaDependency)
                 .addDependency(sharedJavaDependency2))
         .addTarget(
             TargetIdeInfo.builder()
                 .setLabel(sharedJavaDependency)
-                .setKind(Kind.JAVA_LIBRARY)
+                .setKind(Kind.fromRuleName("java_library"))
                 .setJavaInfo(javaInfoWithJars("com/google/example/libshared.jar"))
                 .addDependency(sharedJavaDependency2))
         .addTarget(
             TargetIdeInfo.builder()
                 .setLabel(sharedJavaDependency2)
-                .setKind(Kind.JAVA_LIBRARY)
+                .setKind(Kind.fromRuleName("java_library"))
                 .setJavaInfo(javaInfoWithJars("com/google/example/libshared2.jar")))
         .addTarget(
             TargetIdeInfo.builder()
                 .setLabel(importDependency)
-                .setKind(Kind.JAVA_IMPORT)
+                .setKind(Kind.fromRuleName("java_import"))
                 .setJavaInfo(javaInfoWithCheckedInJars("com/google/example/libimport.jar")))
         .addTarget(
             TargetIdeInfo.builder()
                 .setLabel(transitiveImportDependency)
-                .setKind(Kind.JAVA_IMPORT)
+                .setKind(Kind.fromRuleName("java_import"))
                 .setJavaInfo(
                     javaInfoWithCheckedInJars(
                         "com/google/example/transitive/libimport.jar",
@@ -529,17 +534,17 @@ public class BlazeClassJarProviderIntegrationTest extends BlazeIntegrationTestCa
         .addTarget(
             TargetIdeInfo.builder()
                 .setLabel(unrelatedJava)
-                .setKind(Kind.JAVA_LIBRARY)
+                .setKind(Kind.fromRuleName("java_library"))
                 .setJavaInfo(javaInfoWithJars("com/google/unrelated/libjava.jar")))
         .addTarget(
             TargetIdeInfo.builder()
                 .setLabel(unrelatedAndroid)
-                .setKind(Kind.ANDROID_LIBRARY)
+                .setKind(Kind.fromRuleName("android_library"))
                 .setJavaInfo(javaInfoWithJars("com/google/unrelated/libandroid.jar")))
         .addTarget(
             TargetIdeInfo.builder()
                 .setLabel(unrelatedResource)
-                .setKind(Kind.ANDROID_LIBRARY)
+                .setKind(Kind.fromRuleName("android_library"))
                 .setJavaInfo(
                     javaInfoWithJars(
                         "com/google/unrelated/libresource.jar",

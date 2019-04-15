@@ -47,6 +47,7 @@ import com.intellij.psi.search.GlobalSearchScope.FilesScope;
 import com.intellij.psi.stubs.StubIndex;
 import java.util.Collection;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 
@@ -94,8 +95,8 @@ public final class BlazeGoTestLocator implements SMTestLocator {
     }
     Kind kind = ((FuncallExpression) rule).getRuleKind();
     if (kind != null
-        && kind.languageClass.equals(LanguageClass.GO)
-        && kind.ruleType.equals(RuleType.TEST)) {
+        && kind.getLanguageClass().equals(LanguageClass.GO)
+        && kind.getRuleType().equals(RuleType.TEST)) {
       return ImmutableList.of(new PsiLocation<>(rule));
     }
     return ImmutableList.of();
@@ -141,8 +142,8 @@ public final class BlazeGoTestLocator implements SMTestLocator {
     }
     TargetIdeInfo target = projectData.getTargetMap().get(TargetKey.forPlainTarget(label));
     if (target != null
-        && target.getKind().languageClass.equals(LanguageClass.GO)
-        && target.getKind().ruleType.equals(RuleType.TEST)) {
+        && target.getKind().getLanguageClass().equals(LanguageClass.GO)
+        && target.getKind().getRuleType().equals(RuleType.TEST)) {
       return target;
     }
     return null;
@@ -159,7 +160,8 @@ public final class BlazeGoTestLocator implements SMTestLocator {
       return ImmutableList.of();
     }
     return target.getGoIdeInfo().getSources().stream()
-        .map(projectData.getArtifactLocationDecoder()::decode)
+        .map(projectData.getArtifactLocationDecoder()::resolveSource)
+        .filter(Objects::nonNull)
         .map(lfs::findFileByIoFile)
         .collect(Collectors.toList());
   }

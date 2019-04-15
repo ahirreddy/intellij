@@ -15,8 +15,8 @@
  */
 package com.google.idea.blaze.clwb.run.test;
 
-import com.google.idea.blaze.base.command.BlazeFlags;
 import com.google.idea.blaze.base.syncstatus.SyncStatusContributor;
+import com.google.idea.blaze.clwb.CidrGoogleTestUtilAdapter;
 import com.google.idea.sdkcompat.cidr.OCSymbolAdapter;
 import com.intellij.execution.Location;
 import com.intellij.execution.PsiLocation;
@@ -29,8 +29,8 @@ import com.intellij.psi.util.CachedValueProvider;
 import com.intellij.psi.util.CachedValuesManager;
 import com.intellij.psi.util.PsiModificationTracker;
 import com.intellij.psi.util.PsiTreeUtil;
+import com.jetbrains.cidr.execution.testing.google.CidrGoogleTestFramework;
 import com.jetbrains.cidr.execution.testing.google.CidrGoogleTestUtil;
-import com.jetbrains.cidr.lang.OCFileTypeHelpers;
 import com.jetbrains.cidr.lang.psi.OCCppNamespace;
 import com.jetbrains.cidr.lang.psi.OCFile;
 import com.jetbrains.cidr.lang.psi.OCFunctionDefinition;
@@ -42,9 +42,6 @@ import com.jetbrains.cidr.lang.symbols.OCSymbol;
 import com.jetbrains.cidr.lang.symbols.cpp.OCFunctionSymbol;
 import com.jetbrains.cidr.lang.symbols.cpp.OCStructSymbol;
 import com.jetbrains.cidr.lang.symbols.cpp.OCSymbolWithQualifiedName;
-import com.jetbrains.cidr.lang.symbols.symtable.FileSymbolTablesCache;
-import com.jetbrains.cidr.lang.ui.OCLongActionUtil;
-import java.util.Collection;
 import java.util.List;
 import javax.annotation.Nullable;
 
@@ -52,18 +49,15 @@ import javax.annotation.Nullable;
 public class GoogleTestLocation extends PsiLocation<PsiElement> {
 
   public final GoogleTestSpecification gtest;
-  @Nullable public final String testFilter;
 
   GoogleTestLocation(PsiElement psi, GoogleTestSpecification gtest) {
     super(psi);
     this.gtest = gtest;
-    this.testFilter = gtest.testFilter();
   }
 
-  /** The raw test filter string with '--test_filter=' prepended, or null if there is no filter. */
   @Nullable
-  public String getTestFilterFlag() {
-    return testFilter != null ? BlazeFlags.TEST_FILTER + "=" + testFilter : null;
+  public String getTestFilter() {
+    return gtest.testFilter();
   }
 
   @Nullable
@@ -84,7 +78,7 @@ public class GoogleTestLocation extends PsiLocation<PsiElement> {
     OCStructSymbol parentSymbol;
     if (parent instanceof OCStruct
         && ((parentSymbol = ((OCStruct) parent).getSymbol()) != null)
-        && CidrGoogleTestUtil.isGoogleTestClass(parentSymbol, project)) {
+        && CidrGoogleTestUtilAdapter.isGoogleTestClass(parentSymbol, project)) {
       Couple<String> name = CidrGoogleTestUtil.extractGoogleTestName(parentSymbol, project);
       if (name != null) {
         return createFromClassAndMethod(parent, name.first, name.second);
@@ -94,15 +88,11 @@ public class GoogleTestLocation extends PsiLocation<PsiElement> {
     } else if (parent instanceof OCFunctionDefinition) {
       OCFunctionSymbol symbol = ((OCFunctionDefinition) parent).getSymbol();
       if (symbol != null) {
-        // #api182 change
-        @SuppressWarnings("rawtypes")
         OCSymbolWithQualifiedName resolvedOwner = OCSymbolAdapter.getResolvedOwner(symbol, project);
         if (resolvedOwner != null) {
-          // #api182 change
-          @SuppressWarnings("rawtypes")
           OCSymbol owner = OCSymbolAdapter.getDefinitionSymbol(resolvedOwner, project);
           if (owner instanceof OCStructSymbol
-              && CidrGoogleTestUtil.isGoogleTestClass((OCStructSymbol) owner, project)) {
+              && CidrGoogleTestUtilAdapter.isGoogleTestClass((OCStructSymbol) owner, project)) {
             OCStruct struct = (OCStruct) OCSymbolAdapter.locateDefinition(owner, project);
             Couple<String> name =
                 CidrGoogleTestUtil.extractGoogleTestName((OCStructSymbol) owner, project);
@@ -118,7 +108,7 @@ public class GoogleTestLocation extends PsiLocation<PsiElement> {
     // if we're still here, let's test for a macro and, as a last resort, a file.
     parent = PsiTreeUtil.getNonStrictParentOfType(element, OCMacroCall.class, OCFile.class);
     if (parent instanceof OCMacroCall) {
-      OCMacroCall gtestMacro = CidrGoogleTestUtil.findGoogleTestMacros(parent);
+      OCMacroCall gtestMacro = CidrGoogleTestUtilAdapter.findGoogleTestMacros(parent);
       if (gtestMacro != null) {
         List<OCMacroCallArgument> arguments = gtestMacro.getArguments();
         if (arguments.size() >= 2) {
@@ -132,25 +122,23 @@ public class GoogleTestLocation extends PsiLocation<PsiElement> {
                   || isFirstArgument(element.getPrevSibling());
           String suiteName = CidrGoogleTestUtil.extractArgumentValue(suiteArg);
           String testName = CidrGoogleTestUtil.extractArgumentValue(testArg);
-          OCStructSymbol symbol =
-              CidrGoogleTestUtil.findGoogleTestSymbol(element.getProject(), suiteName, testName);
-          if (symbol != null) {
-            OCStruct targetElement = (OCStruct) OCSymbolAdapter.locateDefinition(symbol, project);
-            return createFromClassAndMethod(targetElement, suiteName, isSuite ? null : testName);
+          PsiElement testElement =
+              CidrGoogleTestUtilAdapter.findGoogleTestSymbol(
+                  element.getProject(), suiteName, testName);
+          if (testElement != null) {
+            return createFromClassAndMethod(testElement, suiteName, isSuite ? null : testName);
           }
         }
       }
-      Couple<String> suite = CidrGoogleTestUtil.extractFullSuiteNameFromMacro(parent);
+      Couple<String> suite = CidrGoogleTestUtilAdapter.extractFullSuiteNameFromMacro(parent);
       if (suite != null) {
-        Collection<OCStructSymbol> res =
-            CidrGoogleTestUtil.findGoogleTestSymbolsForSuiteRandomly(
-                element.getProject(), suite.first, true);
-        if (!res.isEmpty()) {
-          OCStruct struct =
-              (OCStruct) OCSymbolAdapter.locateDefinition(res.iterator().next(), project);
+        PsiElement res =
+            CidrGoogleTestUtilAdapter.findAnyGoogleTestSymbolForSuite(
+                element.getProject(), suite.first);
+        if (res != null) {
           GoogleTestSpecification gtest =
               new GoogleTestSpecification.FromPsiElement(suite.first, null, suite.second, null);
-          return new GoogleTestLocation(struct, gtest);
+          return new GoogleTestLocation(res, gtest);
         }
       }
     } else if (parent instanceof OCFile && mayBeGoogleTestFile((OCFile) parent)) {
@@ -170,36 +158,11 @@ public class GoogleTestLocation extends PsiLocation<PsiElement> {
 
   /** Returns true if a file may contain googletest cases. */
   private static boolean mayBeGoogleTestFile(OCFile file) {
-    // googletest files should be cc files since it eventually needs to compile+link into a binary
-    if (OCFileTypeHelpers.isHeaderFile(file.getName())) {
-      return false;
-    }
-    if (!areSymbolsPrecalculated(file.getProject())) {
-      // If symbols are not up to date, fileIncludesGoogleTest might block on our "friend"
-      // ensurePendingFilesProcessed(), which would freeze the AWT, so just say "maybe".
+    if (CidrGoogleTestFramework.getInstance().isAvailable(file)) {
       return true;
     }
-    boolean transitivelyIncludesGtestHeader =
-        CachedValuesManager.getCachedValue(
-            file,
-            () -> {
-              // We're not 100% sure this won't block since we don't have access to
-              // "FileSymbolTablesCache.getInstance(project).isUpToDate()", so wrap in timeout.
-              // Throws ProcessCanceledException if timed out or canceled.
-              Boolean doesInclude =
-                  OCLongActionUtil.execWithTimeoutProgressInDispatch(
-                      "progressbar.long.resolve.description",
-                      OCLongActionUtil.TIMEOUT_PROPERTY,
-                      file.getProject(),
-                      () -> CidrGoogleTestUtil.fileIncludesGoogleTest(file));
-              return CachedValueProvider.Result.create(
-                  doesInclude, PsiModificationTracker.MODIFICATION_COUNT);
-            });
-    if (transitivelyIncludesGtestHeader) {
-      return true;
-    }
-    // Symbols and the import graph may not be accurate for unsynced files or files outside
-    // of source roots. Just do a heuristic search on the AST for minimal support.
+    // Test scanning from CidrGoogleTestFramework may not be accurate for unsynced files or files
+    // outside of source roots. Just do a heuristic search on the AST for minimal support.
     return unsyncedFileContainsGtestMacroCalls(file);
   }
 
@@ -225,12 +188,6 @@ public class GoogleTestLocation extends PsiLocation<PsiElement> {
     MacroCallLocator locator = new MacroCallLocator();
     file.accept(locator);
     return locator.foundGtestMacroCall;
-  }
-
-  /** Are symbols ready to be used without blocking? */
-  private static boolean areSymbolsPrecalculated(Project project) {
-    return FileSymbolTablesCache.areSymbolsLoaded(project);
-    // #api182: also check "&& FileSymbolTablesCache.getInstance(project).isUpToDate()";
   }
 
   @Nullable
@@ -270,7 +227,7 @@ public class GoogleTestLocation extends PsiLocation<PsiElement> {
 
     @Override
     public void visitMacroCall(OCMacroCall macroCall) {
-      if (CidrGoogleTestUtil.findGoogleTestMacros(macroCall) != null) {
+      if (CidrGoogleTestUtilAdapter.findGoogleTestMacros(macroCall) != null) {
         foundGtestMacroCall = true;
       }
       visitRecursively(macroCall);

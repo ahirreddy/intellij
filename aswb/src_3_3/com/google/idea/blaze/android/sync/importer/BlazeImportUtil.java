@@ -21,7 +21,6 @@ import com.google.idea.blaze.base.ideinfo.ArtifactLocation;
 import com.google.idea.blaze.base.ideinfo.JavaToolchainIdeInfo;
 import com.google.idea.blaze.base.ideinfo.TargetIdeInfo;
 import com.google.idea.blaze.base.ideinfo.TargetMap;
-import com.google.idea.blaze.base.model.primitives.Kind;
 import com.google.idea.blaze.base.model.primitives.LanguageClass;
 import com.google.idea.blaze.base.model.primitives.WorkspacePath;
 import com.google.idea.blaze.base.projectview.ProjectViewSet;
@@ -61,7 +60,7 @@ public class BlazeImportUtil {
   static Stream<TargetIdeInfo> getSourceTargetsStream(
       TargetMap targetMap, ProjectViewTargetImportFilter importFilter) {
     return targetMap.targets().stream()
-        .filter(target -> target.getKind().languageClass == LanguageClass.ANDROID)
+        .filter(target -> target.getKind().getLanguageClass().equals(LanguageClass.ANDROID))
         .filter(target -> target.getAndroidIdeInfo() != null)
         .filter(importFilter::isSourceTarget)
         .filter(target -> !importFilter.excludeTarget(target));
@@ -83,7 +82,7 @@ public class BlazeImportUtil {
   /** Returns the javac jar if it can be found in the given list of targets, otherwise null. */
   static ArtifactLocation getJavacJar(Collection<TargetIdeInfo> targets) {
     return targets.stream()
-        .filter(target -> target.getKind() == Kind.JAVA_TOOLCHAIN)
+        .filter(target -> target.getJavaToolchainIdeInfo() != null)
         .map(TargetIdeInfo::getJavaToolchainIdeInfo)
         .filter(Objects::nonNull)
         .map(JavaToolchainIdeInfo::getJavacJar)
@@ -102,14 +101,9 @@ public class BlazeImportUtil {
 
   /**
    * Returns a predicate that returns true if a fake AAR should be created for the given resource
-   * folder. That is, it returns true if fake aars are enabled and the folder is outside the project
-   * view.
+   * folder. That is, it returns true if the folder is outside the project view.
    */
   public static Predicate<ArtifactLocation> getShouldCreateFakeAarFilter(BlazeImportInput input) {
-    if (!input.createFakeAarLibrariesExperiment) {
-      return (it) -> Boolean.FALSE;
-    }
-
     ImportRoots importRoots =
         ImportRoots.builder(input.workspaceRoot, input.buildSystem)
             .add(input.projectViewSet)

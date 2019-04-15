@@ -18,6 +18,7 @@ java_proto_library(
 
 java_binary(
     name = "IntellijAspectTestFixtureBuilder",
+    testonly = True,
     srcs = ["src/com/google/idea/blaze/aspect/IntellijAspectTestFixtureBuilder.java"],
     visibility = [
         "//aspect/testing/tests:__subpackages__",
@@ -43,6 +44,51 @@ java_library(
         "//intellij_platform_sdk:jsr305",
         "//proto:common_java_proto",
         "//proto:intellij_ide_info_java_proto",
+        "@junit//jar",
+    ],
+)
+
+proto_library(
+    name = "fast_build_aspect_test_fixture_proto",
+    testonly = True,
+    srcs = ["fast_build_aspect_test_fixture.proto"],
+    deps = ["//proto:fast_build_info_proto"],
+)
+
+java_proto_library(
+    name = "fast_build_aspect_test_fixture_java_proto",
+    testonly = True,
+    visibility = [
+        "//aspect/testing:__subpackages__",
+    ],
+    deps = [":fast_build_aspect_test_fixture_proto"],
+)
+
+java_binary(
+    name = "FastBuildAspectTestFixtureBuilder",
+    testonly = True,
+    srcs = ["src/com/google/idea/blaze/aspect/FastBuildAspectTestFixtureBuilder.java"],
+    visibility = [
+        "//aspect/testing:__subpackages__",
+    ],
+    deps = [
+        ":fast_build_aspect_test_fixture_java_proto",
+        "//aspect/testing:guava",
+        "//proto:fast_build_info_java_proto",
+        "@com_google_protobuf_java//:protobuf_java",
+    ],
+)
+
+java_library(
+    name = "FastBuildAspectLoader",
+    testonly = True,
+    srcs = ["src/com/google/idea/blaze/aspect/FastBuildAspectRule.java"],
+    visibility = [
+        "//aspect/testing:__subpackages__",
+    ],
+    deps = [
+        ":fast_build_aspect_test_fixture_java_proto",
+        "//aspect/testing:guava",
         "@junit//jar",
     ],
 )

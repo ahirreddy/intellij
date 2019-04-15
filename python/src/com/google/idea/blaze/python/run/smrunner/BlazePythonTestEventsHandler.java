@@ -17,8 +17,11 @@ package com.google.idea.blaze.python.run.smrunner;
 
 import com.google.common.base.Joiner;
 import com.google.idea.blaze.base.command.BlazeFlags;
+import com.google.idea.blaze.base.execution.BlazeParametersListUtil;
 import com.google.idea.blaze.base.model.primitives.Kind;
 import com.google.idea.blaze.base.model.primitives.Label;
+import com.google.idea.blaze.base.model.primitives.LanguageClass;
+import com.google.idea.blaze.base.model.primitives.RuleType;
 import com.google.idea.blaze.base.run.smrunner.BlazeTestEventsHandler;
 import com.intellij.execution.Location;
 import com.intellij.execution.testframework.sm.runner.SMTestLocator;
@@ -36,7 +39,9 @@ public class BlazePythonTestEventsHandler implements BlazeTestEventsHandler {
 
   @Override
   public boolean handlesKind(@Nullable Kind kind) {
-    return kind == Kind.PY_TEST;
+    return kind != null
+        && kind.getLanguageClass().equals(LanguageClass.PYTHON)
+        && kind.getRuleType().equals(RuleType.TEST);
   }
 
   @Override
@@ -71,7 +76,9 @@ public class BlazePythonTestEventsHandler implements BlazeTestEventsHandler {
     if (filters.isEmpty()) {
       return null;
     }
-    return String.format("%s=%s", BlazeFlags.TEST_FILTER, Joiner.on(' ').join(filters));
+    return String.format(
+        "%s=%s",
+        BlazeFlags.TEST_FILTER, BlazeParametersListUtil.encodeParam(Joiner.on(' ').join(filters)));
   }
 
   @Nullable

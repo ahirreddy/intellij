@@ -55,8 +55,11 @@ public class JavaSourcePackageReader extends JavaPackageReader {
       return null;
     }
     InputStreamProvider inputStreamProvider = InputStreamProvider.getInstance();
-    File sourceFile = artifactLocationDecoder.decode(sourceArtifact.artifactLocation);
-    try (InputStream javaInputStream = inputStreamProvider.getFile(sourceFile)) {
+    File sourceFile = artifactLocationDecoder.resolveSource(sourceArtifact.artifactLocation);
+    if (sourceFile == null) {
+      return null;
+    }
+    try (InputStream javaInputStream = inputStreamProvider.forFile(sourceFile)) {
       BufferedReader javaReader = new BufferedReader(new InputStreamReader(javaInputStream, UTF_8));
       String javaLine;
 

@@ -25,6 +25,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 import com.google.idea.blaze.base.dependencies.TargetInfo;
 import com.google.idea.blaze.base.ideinfo.TargetIdeInfo;
 import com.google.idea.blaze.base.ideinfo.TargetKey;
+import com.google.idea.blaze.base.logging.EventLoggingService;
 import com.google.idea.blaze.base.model.BlazeProjectData;
 import com.google.idea.blaze.base.model.primitives.Kind;
 import com.google.idea.blaze.base.model.primitives.Label;
@@ -32,9 +33,12 @@ import com.google.idea.blaze.base.model.primitives.TargetExpression;
 import com.google.idea.blaze.base.model.primitives.WorkspaceRoot;
 import com.google.idea.blaze.base.projectview.ProjectViewManager;
 import com.google.idea.blaze.base.projectview.ProjectViewSet;
+import com.google.idea.blaze.base.run.PendingRunConfigurationContext.NoRunConfigurationFoundException;
 import com.google.idea.blaze.base.run.confighandler.BlazeCommandRunConfigurationHandler;
 import com.google.idea.blaze.base.run.confighandler.BlazeCommandRunConfigurationHandlerProvider;
+import com.google.idea.blaze.base.run.confighandler.BlazeCommandRunConfigurationHandlerProvider.TargetState;
 import com.google.idea.blaze.base.run.confighandler.BlazeCommandRunConfigurationRunner;
+import com.google.idea.blaze.base.run.producers.RunConfigurationContext;
 import com.google.idea.blaze.base.run.state.RunConfigurationState;
 import com.google.idea.blaze.base.run.state.RunConfigurationStateEditor;
 import com.google.idea.blaze.base.run.targetfinder.FuturesUtil;
@@ -48,11 +52,10 @@ import com.google.idea.blaze.base.ui.UiUtil;
 import com.google.idea.sdkcompat.run.RunConfigurationBaseCompat;
 import com.intellij.execution.ExecutionException;
 import com.intellij.execution.Executor;
-import com.intellij.execution.RunnerIconProvider;
+import com.intellij.execution.RunCanceledByUserException;
 import com.intellij.execution.configurations.ConfigurationFactory;
 import com.intellij.execution.configurations.LocatableConfigurationBase;
 import com.intellij.execution.configurations.ModuleRunProfile;
-import com.intellij.execution.configurations.RunConfiguration;
 import com.intellij.execution.configurations.RunConfigurationWithSuppressedDefaultDebugAction;
 import com.intellij.execution.configurations.RunProfileState;
 import com.intellij.execution.configurations.RuntimeConfigurationError;
@@ -72,14 +75,12 @@ import com.intellij.util.ui.UIUtil;
 import java.util.Collection;
 import javax.annotation.Nullable;
 import javax.swing.Box;
-import javax.swing.Icon;
 import javax.swing.JComponent;
 import org.jdom.Element;
 
 /** A run configuration which executes Blaze commands. */
 public class BlazeCommandRunConfiguration extends LocatableConfigurationBase
     implements BlazeRunConfiguration,
-        RunnerIconProvider,
         ModuleRunProfile,
         RunConfigurationWithSuppressedDefaultDebugAction {
 
@@ -118,13 +119,83 @@ public class BlazeCommandRunConfiguration extends LocatableConfigurationBase
   private static final String TARGET_TAG = "blaze-target";
   private static final String KIND_ATTR = "kind";
   private static final String KEEP_IN_SYNC_TAG = "keep-in-sync";
+  private static final String CONTEXT_ELEMENT_ATTR = "context-element";
 
   /** The blaze-specific parts of the last serialized state of the configuration. */
   private Element blazeElementState = new Element(BLAZE_SETTINGS_TAG);
 
-  @Nullable private String targetPattern;
-  // Null if the target is null, not a Label, or not a known rule.
-  @Nullable private Kind targetKind;
+  /**
+   * Used when we don't yet know all the configuration details, but want to provide a 'run/debug'
+   * context action anyway.
+   */
+  @Nullable private volatile PendingRunConfigurationContext pendingContext;
+
+  /**
+   * Set up a run configuration with a not-yet-known target pattern. Returns false if the pending
+   * context is known to be invalid.
+   */
+  public boolean setPendingContext(PendingRunConfigurationContext pendingContext) {
+    this.pendingContext = pendingContext;
+    this.targetPattern = null;
+    this.targetKindString = null;
+    this.contextElementString = pendingContext.getSourceElementString();
+    updateHandler();
+    EventLoggingService.getInstance().logEvent(getClass(), "async-run-config");
+    if (pendingContext.getFuture().isDone()) {
+      // set it up synchronously, and return the result
+      return doSetupPendingContext(pendingContext);
+    } else {
+      pendingContext
+          .getFuture()
+          .addListener(() -> doSetupPendingContext(pendingContext), MoreExecutors.directExecutor());
+      return true;
+    }
+  }
+
+  private boolean doSetupPendingContext(PendingRunConfigurationContext pendingContext) {
+    try {
+      RunConfigurationContext context =
+          PendingRunConfigurationContext.getFutureHandlingErrors(pendingContext);
+      boolean success = context.setupRunConfiguration(this);
+      if (success) {
+        this.pendingContext = null;
+        return true;
+      }
+    } catch (RunCanceledByUserException | NoRunConfigurationFoundException e) {
+      // silently ignore
+    } catch (ExecutionException e) {
+      logger.warn(e);
+    }
+    return false;
+  }
+
+  /**
+   * Returns true if this was previously a pending run configuration, but it turned out to be
+   * invalid. We remove these from the project periodically.
+   */
+  boolean pendingSetupFailed() {
+    PendingRunConfigurationContext pendingContext = this.pendingContext;
+    if (pendingContext == null || !pendingContext.getFuture().isDone()) {
+      return false;
+    }
+    if (targetPattern == null) {
+      return true;
+    }
+    // setup failed, but it still has useful information (perhaps the user modified it?)
+    this.pendingContext = null;
+    return false;
+  }
+
+  @Nullable
+  public PendingRunConfigurationContext getPendingContext() {
+    return pendingContext;
+  }
+
+  @Nullable private volatile String targetPattern;
+  // null if the target is null or not a Label
+  @Nullable private volatile String targetKindString;
+  // used to recognize previously created pending targets by their corresponding source element
+  @Nullable private volatile String contextElementString;
 
   // for keeping imported configurations in sync with their source XML
   @Nullable private Boolean keepInSync = null;
@@ -135,7 +206,8 @@ public class BlazeCommandRunConfiguration extends LocatableConfigurationBase
   public BlazeCommandRunConfiguration(Project project, ConfigurationFactory factory, String name) {
     super(project, factory, name);
     // start with whatever fallback is present
-    handlerProvider = BlazeCommandRunConfigurationHandlerProvider.findHandlerProvider(null);
+    handlerProvider =
+        BlazeCommandRunConfigurationHandlerProvider.findHandlerProvider(TargetState.KNOWN, null);
     handler = handlerProvider.createHandler(this);
     try {
       handler.getState().readExternal(blazeElementState);
@@ -174,6 +246,11 @@ public class BlazeCommandRunConfiguration extends LocatableConfigurationBase
     return keepInSync;
   }
 
+  @Nullable
+  public String getContextElementString() {
+    return contextElementString;
+  }
+
   @Override
   @Nullable
   public TargetExpression getTarget() {
@@ -193,8 +270,15 @@ public class BlazeCommandRunConfiguration extends LocatableConfigurationBase
 
   private void updateHandler() {
     BlazeCommandRunConfigurationHandlerProvider handlerProvider =
-        BlazeCommandRunConfigurationHandlerProvider.findHandlerProvider(targetKind);
+        BlazeCommandRunConfigurationHandlerProvider.findHandlerProvider(
+            getTargetState(), getTargetKind());
     updateHandlerIfDifferentProvider(handlerProvider);
+  }
+
+  private TargetState getTargetState() {
+    return targetPattern == null && pendingContext != null
+        ? TargetState.PENDING
+        : TargetState.KNOWN;
   }
 
   private void updateHandlerIfDifferentProvider(
@@ -228,7 +312,7 @@ public class BlazeCommandRunConfiguration extends LocatableConfigurationBase
    */
   @Nullable
   public Kind getTargetKind() {
-    return targetKind;
+    return Kind.fromRuleName(targetKindString);
   }
 
   /**
@@ -261,7 +345,7 @@ public class BlazeCommandRunConfiguration extends LocatableConfigurationBase
   }
 
   private void updateTargetKind(@Nullable TargetInfo targetInfo) {
-    targetKind = targetInfo != null ? targetInfo.getKind() : null;
+    targetKindString = targetInfo != null ? targetInfo.kindString : null;
     updateHandler();
   }
 
@@ -271,7 +355,7 @@ public class BlazeCommandRunConfiguration extends LocatableConfigurationBase
    *     known rule, and "unknown target" if there is no target.
    */
   private String getTargetKindName() {
-    Kind kind = targetKind;
+    Kind kind = getTargetKind();
     if (kind != null) {
       return kind.toString();
     }
@@ -293,19 +377,6 @@ public class BlazeCommandRunConfiguration extends LocatableConfigurationBase
       throw new RuntimeConfigurationError(
           "Configuration cannot be run until project has been synced.");
     }
-    if (Strings.isNullOrEmpty(targetPattern)) {
-      throw new RuntimeConfigurationError(
-          String.format(
-              "You must specify a %s target expression.", Blaze.buildSystemName(getProject())));
-    }
-    if (!targetPattern.startsWith("//")) {
-      throw new RuntimeConfigurationError(
-          "You must specify the full target expression, starting with //");
-    }
-    String error = TargetExpression.validate(targetPattern);
-    if (error != null) {
-      throw new RuntimeConfigurationError(error);
-    }
     boolean hasBlazeBeforeRunTask =
         RunConfigurationBaseCompat.getAllBeforeRunTasks(this).stream()
             .anyMatch(
@@ -319,6 +390,23 @@ public class BlazeCommandRunConfiguration extends LocatableConfigurationBase
               Blaze.buildSystemName(getProject())));
     }
     handler.checkConfiguration();
+    PendingRunConfigurationContext pendingContext = this.pendingContext;
+    if (pendingContext != null && !pendingContext.getFuture().isDone()) {
+      return;
+    }
+    if (Strings.isNullOrEmpty(targetPattern)) {
+      throw new RuntimeConfigurationError(
+          String.format(
+              "You must specify a %s target expression.", Blaze.buildSystemName(getProject())));
+    }
+    if (!targetPattern.startsWith("//")) {
+      throw new RuntimeConfigurationError(
+          "You must specify the full target expression, starting with //");
+    }
+    String error = TargetExpression.validate(targetPattern);
+    if (error != null) {
+      throw new RuntimeConfigurationError(error);
+    }
   }
 
   private static Element getBlazeSettingsCopy(Element element) {
@@ -344,12 +432,13 @@ public class BlazeCommandRunConfiguration extends LocatableConfigurationBase
 
     String keepInSyncString = element.getAttributeValue(KEEP_IN_SYNC_TAG);
     keepInSync = keepInSyncString != null ? Boolean.parseBoolean(keepInSyncString) : null;
+    contextElementString = element.getAttributeValue(CONTEXT_ELEMENT_ATTR);
 
     // Target is persisted as a tag to permit multiple targets in the future.
     Element targetElement = element.getChild(TARGET_TAG);
     if (targetElement != null && !Strings.isNullOrEmpty(targetElement.getTextTrim())) {
       targetPattern = targetElement.getTextTrim();
-      targetKind = Kind.fromString(targetElement.getAttributeValue(KIND_ATTR));
+      targetKindString = targetElement.getAttributeValue(KIND_ATTR);
     }
     // Because BlazeProjectData is not available when configurations are loading,
     // we can't call setTarget and have it find the appropriate handler provider.
@@ -374,8 +463,8 @@ public class BlazeCommandRunConfiguration extends LocatableConfigurationBase
     if (targetPattern != null) {
       Element targetElement = new Element(TARGET_TAG);
       targetElement.setText(targetPattern);
-      if (targetKind != null) {
-        targetElement.setAttribute(KIND_ATTR, targetKind.toString());
+      if (targetKindString != null) {
+        targetElement.setAttribute(KIND_ATTR, targetKindString);
       }
       blazeElementState.addContent(targetElement);
     }
@@ -385,6 +474,9 @@ public class BlazeCommandRunConfiguration extends LocatableConfigurationBase
       blazeElementState.removeAttribute(KEEP_IN_SYNC_TAG);
     }
     blazeElementState.setAttribute(HANDLER_ATTR, handlerProvider.getId());
+    if (contextElementString != null) {
+      blazeElementState.setAttribute(CONTEXT_ELEMENT_ATTR, contextElementString);
+    }
 
     handler.getState().writeExternal(blazeElementState);
     // copy our internal state to the provided Element
@@ -396,7 +488,9 @@ public class BlazeCommandRunConfiguration extends LocatableConfigurationBase
     final BlazeCommandRunConfiguration configuration = (BlazeCommandRunConfiguration) super.clone();
     configuration.blazeElementState = blazeElementState.clone();
     configuration.targetPattern = targetPattern;
-    configuration.targetKind = targetKind;
+    configuration.targetKindString = targetKindString;
+    configuration.contextElementString = contextElementString;
+    configuration.pendingContext = pendingContext;
     configuration.keepInSync = keepInSync;
     configuration.handlerProvider = handlerProvider;
     configuration.handler = handlerProvider.createHandler(this);
@@ -425,12 +519,6 @@ public class BlazeCommandRunConfiguration extends LocatableConfigurationBase
   @Nullable
   public String suggestedName() {
     return handler.suggestedName(this);
-  }
-
-  @Override
-  @Nullable
-  public Icon getExecutorIcon(RunConfiguration configuration, Executor executor) {
-    return handler.getExecutorIcon(configuration, executor);
   }
 
   @Override

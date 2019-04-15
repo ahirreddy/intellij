@@ -23,13 +23,13 @@ import com.android.projectmodel.Library;
 import com.android.tools.idea.projectsystem.AndroidModuleSystem;
 import com.android.tools.idea.projectsystem.CapabilityNotSupported;
 import com.android.tools.idea.projectsystem.CapabilityStatus;
+import com.android.tools.idea.projectsystem.CapabilitySupported;
 import com.android.tools.idea.projectsystem.DependencyManagementException;
 import com.android.tools.idea.projectsystem.NamedModuleTemplate;
 import com.android.tools.idea.projectsystem.SampleDataDirectoryProvider;
 import com.google.common.collect.ImmutableList;
 import com.google.idea.blaze.android.libraries.UnpackedAars;
 import com.google.idea.blaze.android.npw.project.BlazeAndroidModuleTemplate;
-import com.google.idea.blaze.android.sync.importer.BlazeImportInput;
 import com.google.idea.blaze.android.sync.model.AarLibrary;
 import com.google.idea.blaze.android.sync.model.AndroidResourceModuleRegistry;
 import com.google.idea.blaze.android.sync.model.BlazeAndroidSyncData;
@@ -52,6 +52,7 @@ import com.google.idea.blaze.java.sync.model.BlazeJarLibrary;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.fileEditor.OpenFileDescriptor;
 import com.intellij.openapi.module.Module;
+import com.intellij.openapi.module.ModuleServiceManager;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.psi.PsiElement;
@@ -70,6 +71,10 @@ public class BlazeModuleSystem implements AndroidModuleSystem, BlazeClassFileFin
   private Module module;
   private SampleDataDirectoryProvider sampleDataDirectoryProvider;
   private BlazeClassFileFinder classFileFinder;
+
+  public static BlazeModuleSystem getInstance(Module module) {
+    return ModuleServiceManager.getService(module, BlazeModuleSystem.class);
+  }
 
   public BlazeModuleSystem(Module module) {
     this.module = module;
@@ -102,12 +107,7 @@ public class BlazeModuleSystem implements AndroidModuleSystem, BlazeClassFileFin
 
   @Override
   public CapabilityStatus canGeneratePngFromVectorGraphics() {
-    // We're currently unsure of the state of the Blaze support, so we report that it's unsupported.
-    // TODO: Change this to "supported" when and if we can confirm that Blaze supports it
-    return new CapabilityNotSupported(
-        "<html><p>Blaze does not support generation of PNG images from vector assets. "
-            + "Vector asset support requires a SDK version of at least 21.</p></html>",
-        "Vector Assets Not Supported");
+    return new CapabilitySupported();
   }
 
   @Override
@@ -260,8 +260,7 @@ public class BlazeModuleSystem implements AndroidModuleSystem, BlazeClassFileFin
               ProjectViewManager.getInstance(project).getProjectViewSet(), blazeProjectData)) {
         if (library instanceof AarLibrary) {
           libraries.add(toExternalLibrary((AarLibrary) library, decoder, project));
-        } else if (BlazeImportInput.createLooksLikeAarLibrary.getValue()
-            && library instanceof BlazeResourceLibrary) {
+        } else if (library instanceof BlazeResourceLibrary) {
           libraries.add(toExternalLibrary((BlazeResourceLibrary) library, decoder));
         } else if (library instanceof BlazeJarLibrary) {
           libraries.add(toExternalLibrary((BlazeJarLibrary) library, decoder));
@@ -280,8 +279,7 @@ public class BlazeModuleSystem implements AndroidModuleSystem, BlazeClassFileFin
     BlazeAndroidSyncData androidSyncData =
         blazeProjectData.getSyncState().get(BlazeAndroidSyncData.class);
     for (String libraryKey : registry.get(module).resourceLibraryKeys) {
-      if (BlazeImportInput.createLooksLikeAarLibrary.getValue()
-          && androidSyncData.importResult.resourceLibraries.containsKey(libraryKey)) {
+      if (androidSyncData.importResult.resourceLibraries.containsKey(libraryKey)) {
         libraries.add(
             toExternalLibrary(
                 androidSyncData.importResult.resourceLibraries.get(libraryKey), decoder));

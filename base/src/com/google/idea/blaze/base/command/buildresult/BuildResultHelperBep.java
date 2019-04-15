@@ -16,6 +16,7 @@
 package com.google.idea.blaze.base.command.buildresult;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableListMultimap;
 import com.google.idea.blaze.base.command.info.BlazeInfo;
 import com.google.idea.blaze.base.model.primitives.Label;
 import com.intellij.openapi.diagnostic.Logger;
@@ -25,7 +26,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Predicate;
@@ -53,24 +53,22 @@ class BuildResultHelperBep implements BuildResultHelper {
   }
 
   @Override
-  public ImmutableList<File> getBuildArtifacts() throws GetArtifactsException {
-    return readResult(
-        input -> BuildEventProtocolOutputReader.parseAllOutputFilenames(input, fileFilter));
+  public ImmutableList<OutputArtifact> getBuildArtifacts() throws GetArtifactsException {
+    return readResult(input -> BuildEventProtocolOutputReader.parseAllOutputs(input, fileFilter));
   }
 
   @Override
-  public ImmutableList<File> getBuildArtifactsForTarget(Label target) throws GetArtifactsException {
+  public ImmutableList<OutputArtifact> getBuildArtifactsForTarget(Label target)
+      throws GetArtifactsException {
     return readResult(
         input -> BuildEventProtocolOutputReader.parseArtifactsForTarget(input, target, fileFilter));
   }
 
   @Override
-  public ImmutableList<File> getArtifactsForOutputGroups(Collection<String> outputGroups)
+  public ImmutableListMultimap<String, OutputArtifact> getPerOutputGroupArtifacts()
       throws GetArtifactsException {
     return readResult(
-        input ->
-            BuildEventProtocolOutputReader.parseAllOutputGroupFilenames(
-                input, outputGroups, fileFilter));
+        input -> BuildEventProtocolOutputReader.parsePerOutputGroupArtifacts(input, fileFilter));
   }
 
   private <V> V readResult(BepReader<V> readAction) throws GetArtifactsException {

@@ -8,89 +8,62 @@ load(
 load(
     "//build_defs:build_defs.bzl",
     "intellij_plugin",
-    "merged_plugin_xml",
+    "intellij_plugin_library",
     "optional_plugin_xml",
     "stamped_plugin_xml",
 )
-load("//intellij_platform_sdk:build_defs.bzl", "select_for_plugin_api")
 
 java_library(
     name = "golang",
-    srcs = glob(["src/**/*.java"]) + select_for_plugin_api({
-        "intellij-2018.2": [],
-        "intellij-ue-2018.2": [],
-        "intellij-2018.3": glob(["v183/src/**/*.java"]),
-        "intellij-ue-2018.3": glob(["v183/src/**/*.java"]),
-    }),
-    visibility = ["//visibility:public"],
+    srcs = glob(["src/**/*.java"]),
+    visibility = [
+        "//java/com/google/devtools/intellij/blaze/plugin/golang:__pkg__",
+        "//javatests/com/google/devtools/intellij/blaze/plugin/golang:__pkg__",
+    ],
     deps = [
         "//base",
         "//common/experiments",
         "//common/transactions",
         "//intellij_platform_sdk:jsr305",
         "//intellij_platform_sdk:plugin_api",
-        "//sdkcompat",
+        "//proto:proto_deps",
         "//third_party/go",
     ],
-)
-
-filegroup(
-    name = "plugin_xml",
-    srcs = ["src/META-INF/blaze-go.xml"],
-    visibility = ["//visibility:public"],
 )
 
 optional_plugin_xml(
     name = "optional_xml",
     module = "org.jetbrains.plugins.go",
-    plugin_xml = ":merged_optional_xml",
+    plugin_xml = "src/META-INF/go-contents.xml",
+)
+
+intellij_plugin_library(
+    name = "plugin_library",
+    optional_plugin_xmls = [":optional_xml"],
+    plugin_xmls = ["src/META-INF/blaze-go.xml"],
     visibility = ["//visibility:public"],
-)
-
-merged_plugin_xml(
-    name = "merged_optional_xml",
-    srcs = ["src/META-INF/go-contents.xml"] + select_for_plugin_api({
-        "intellij-2018.2": [],
-        "intellij-ue-2018.2": [],
-        "intellij-2018.3": ["v183/src/META-INF/go-contents.xml"],
-        "intellij-ue-2018.3": ["v183/src/META-INF/go-contents.xml"],
-    }),
-)
-
-merged_plugin_xml(
-    name = "merged_plugin_xml",
-    srcs = [
-        "//base:plugin_xml",
-    ] + [
-        ":plugin_xml",
-    ],
+    deps = [":golang"],
 )
 
 stamped_plugin_xml(
     name = "golang_plugin_xml",
     plugin_id = "com.google.idea.blaze.golang",
     plugin_name = "com.google.idea.blaze.golang",
-    plugin_xml = "merged_plugin_xml",
 )
 
 intellij_plugin(
     name = "golang_integration_test_plugin",
     testonly = 1,
-    optional_plugin_xmls = [":optional_xml"],
     plugin_xml = ":golang_plugin_xml",
     deps = [
-        ":golang",
+        ":plugin_library",
+        "//base:plugin_library",
     ],
 )
 
 intellij_unit_test_suite(
     name = "unit_tests",
-    srcs = glob(["tests/unittests/**/*.java"]) + select_for_plugin_api({
-        "intellij-2018.2": [],
-        "intellij-ue-2018.2": [],
-        "intellij-2018.3": glob(["v183/tests/unittests/**/*.java"]),
-        "intellij-ue-2018.3": glob(["v183/tests/unittests/**/*.java"]),
-    }),
+    srcs = glob(["tests/unittests/**/*.java"]),
     test_package_root = "com.google.idea.blaze.golang",
     deps = [
         ":golang",
@@ -98,6 +71,7 @@ intellij_unit_test_suite(
         "//base:unit_test_utils",
         "//intellij_platform_sdk:jsr305",
         "//intellij_platform_sdk:plugin_api_for_tests",
+        "//intellij_platform_sdk:test_libs",
         "//third_party/go:go_for_tests",
         "@junit//jar",
     ],
@@ -121,6 +95,7 @@ intellij_integration_test_suite(
         "//common/experiments:unit_test_utils",
         "//intellij_platform_sdk:jsr305",
         "//intellij_platform_sdk:plugin_api_for_tests",
+        "//intellij_platform_sdk:test_libs",
         "//third_party/go:go_for_tests",
         "@junit//jar",
     ],

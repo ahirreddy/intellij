@@ -16,6 +16,7 @@
 package com.google.idea.blaze.base.run.state;
 
 import static com.google.common.base.Preconditions.checkState;
+import static com.google.common.collect.ImmutableList.toImmutableList;
 
 import com.google.common.collect.ImmutableList;
 import com.google.idea.blaze.base.command.BlazeFlags;
@@ -73,7 +74,7 @@ public class BlazeCommandRunConfigurationCommonState extends RunConfigurationCom
   /** Searches through all blaze flags for the first one beginning with '--test_filter' */
   @Nullable
   public String getTestFilterFlag() {
-    for (String flag : getBlazeFlagsState().getExpandedFlags()) {
+    for (String flag : getBlazeFlagsState().getRawFlags()) {
       if (flag.startsWith(BlazeFlags.TEST_FILTER)) {
         return flag;
       }
@@ -90,6 +91,13 @@ public class BlazeCommandRunConfigurationCommonState extends RunConfigurationCom
 
     checkState(testFilterFlag.startsWith(TEST_FILTER_FLAG_PREFIX));
     return testFilterFlag.substring(TEST_FILTER_FLAG_PREFIX.length());
+  }
+
+  public ImmutableList<String> getTestArgs() {
+    return getBlazeFlagsState().getRawFlags().stream()
+        .filter(f -> f.startsWith(BlazeFlags.TEST_ARG))
+        .map(f -> f.substring(BlazeFlags.TEST_ARG.length()))
+        .collect(toImmutableList());
   }
 
   public void validate(BuildSystem buildSystem) throws RuntimeConfigurationException {

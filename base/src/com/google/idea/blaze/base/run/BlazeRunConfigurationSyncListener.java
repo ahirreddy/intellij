@@ -25,8 +25,9 @@ import com.google.idea.blaze.base.projectview.section.sections.TargetSection;
 import com.google.idea.blaze.base.run.exporter.RunConfigurationSerializer;
 import com.google.idea.blaze.base.scope.BlazeContext;
 import com.google.idea.blaze.base.settings.BlazeImportSettings;
-import com.google.idea.blaze.base.sync.BlazeSyncParams.SyncMode;
 import com.google.idea.blaze.base.sync.SyncListener;
+import com.google.idea.blaze.base.sync.SyncMode;
+import com.google.idea.blaze.base.sync.SyncResult;
 import com.google.idea.blaze.base.sync.workspace.WorkspacePathResolver;
 import com.google.idea.common.transactions.Transactions;
 import com.google.idea.sdkcompat.run.RunConfigurationBaseCompat;
@@ -59,6 +60,7 @@ public class BlazeRunConfigurationSyncListener implements SyncListener {
       SyncMode syncMode,
       SyncResult syncResult) {
     updateExistingRunConfigurations(project);
+    removeInvalidRunConfigurations(project);
     if (syncMode == SyncMode.STARTUP || syncMode == SyncMode.NO_BUILD) {
       return;
     }
@@ -84,6 +86,23 @@ public class BlazeRunConfigurationSyncListener implements SyncListener {
             maybeAddRunConfiguration(project, blazeProjectData, label);
           }
         });
+  }
+
+  private static void removeInvalidRunConfigurations(Project project) {
+    RunManagerImpl manager = RunManagerImpl.getInstanceImpl(project);
+    List<RunnerAndConfigurationSettings> toRemove =
+        manager.getConfigurationSettingsList(BlazeCommandRunConfigurationType.getInstance())
+            .stream()
+            .filter(s -> isInvalidRunConfig(s.getConfiguration()))
+            .collect(Collectors.toList());
+    if (!toRemove.isEmpty()) {
+      manager.removeConfigurations(toRemove);
+    }
+  }
+
+  private static boolean isInvalidRunConfig(RunConfiguration config) {
+    return config instanceof BlazeCommandRunConfiguration
+        && ((BlazeCommandRunConfiguration) config).pendingSetupFailed();
   }
 
   /**
@@ -175,7 +194,7 @@ public class BlazeRunConfigurationSyncListener implements SyncListener {
       if (configurationFactory.handlesTarget(project, blazeProjectData, label)) {
         final RunnerAndConfigurationSettings settings =
             configurationFactory.createForTarget(project, runManager, label);
-        runManager.addConfiguration(settings, /* isShared */ false);
+        runManager.addConfiguration(settings, /* isShared= */ false);
         if (runManager.getSelectedConfiguration() == null) {
           runManager.setSelectedConfiguration(settings);
         }
