@@ -7,7 +7,7 @@ licenses(["notice"])  # Apache 2.0
 load(
     "//build_defs:build_defs.bzl",
     "intellij_plugin",
-    "merged_plugin_xml",
+    "intellij_plugin_library",
     "optional_plugin_xml",
     "plugin_deploy_zip",
     "repackaged_files",
@@ -24,53 +24,25 @@ load(
     "intellij_unit_test_suite",
 )
 
-merged_plugin_xml(
-    name = "merged_plugin_xml_common",
-    srcs = [
-        "src/META-INF/ijwb.xml",
-        "//base:plugin_xml",
-        "//dart:plugin_xml",
-        "//golang:plugin_xml",
-        "//java:plugin_xml",
-        "//kotlin:plugin_xml",
-        "//python:plugin_xml",
-        "//scala:plugin_xml",
-        "//skylark:plugin_xml",
-    ],
-)
-
-merged_plugin_xml(
-    name = "merged_plugin_xml",
-    srcs = [
-        "src/META-INF/ijwb_bazel.xml",
-        ":merged_plugin_xml_common",
-    ],
-)
-
 optional_plugin_xml(
     name = "optional_java",
     module = "com.intellij.modules.java",
     plugin_xml = "src/META-INF/java-contents.xml",
 )
 
-optional_plugin_xml(
-    name = "optional_javascript",
-    module = "JavaScript",
-    plugin_xml = "src/META-INF/javascript-contents.xml",
-)
-
-optional_plugin_xml(
-    name = "optional_typescript",
-    module = "JavaScript",
-    plugin_xml = "src/META-INF/typescript-contents.xml",
+intellij_plugin_library(
+    name = "plugin_library",
+    optional_plugin_xmls = [":optional_java"],
+    plugin_xmls = ["src/META-INF/ijwb.xml"],
+    deps = [":ijwb_lib"],
 )
 
 stamped_plugin_xml(
     name = "stamped_plugin_xml",
     changelog_file = "//:changelog",
+    description_file = "src/META-INF/description.html",
     plugin_id = "com.google.idea.bazel.ijwb.databricks",
     plugin_name = "Databricks Bazel",
-    plugin_xml = ":merged_plugin_xml",
     stamp_since_build = True,
     stamp_until_build = True,
     version = VERSION,
@@ -79,49 +51,32 @@ stamped_plugin_xml(
 java_library(
     name = "ijwb_lib",
     srcs = glob(["src/**/*.java"]),
-    exports = [
-        "//plugin_dev",
-    ],
-    runtime_deps = [
-        "//dart",
-        "//golang",
-        "//kotlin",
-        "//python",
-        "//scala",
-        "//skylark",
-        "//terminal",
-    ],
     deps = [
         "//base",
-        "//common/experiments",
         "//intellij_platform_sdk:jsr305",
         "//intellij_platform_sdk:plugin_api",
         "//java",
+        "//proto:proto_deps",
         "//sdkcompat",
-        "//third_party/javascript",
     ],
 )
 
-OPTIONAL_PLUGIN_XMLS = [
-    ":optional_java",
-    ":optional_javascript",
-    ":optional_typescript",
-    "//golang:optional_xml",
-    "//java:optional_java",
-    "//java:optional_coverage",
-    "//kotlin:optional_xml",
-    "//plugin_dev:optional_xml",
-    "//python:optional_xml",
-    "//scala:optional_xml",
-    "//terminal:optional_xml",
-]
-
 intellij_plugin(
     name = "ijwb_bazel",
-    optional_plugin_xmls = OPTIONAL_PLUGIN_XMLS,
     plugin_xml = ":stamped_plugin_xml",
     deps = [
-        ":ijwb_lib",
+        ":plugin_library",
+        "//base:plugin_library",
+        "//dart:plugin_library",
+        "//golang:plugin_library",
+        "//java:plugin_library",
+        "//javascript:plugin_library",
+        "//kotlin:plugin_library",
+        "//plugin_dev:plugin_library",
+        "//python:plugin_library",
+        "//scala:plugin_library",
+        "//skylark:plugin_library",
+        "//terminal:plugin_library",
     ],
 )
 
@@ -138,10 +93,17 @@ repackaged_files(
     strip_prefix = "/aspect",
 )
 
+repackaged_files(
+    name = "fast_build_javac",
+    srcs = ["//java:fast_build_javac"],
+    prefix = "ijwb/lib",
+)
+
 intellij_plugin_debug_target(
     name = "ijwb_bazel_dev",
     deps = [
         ":aspect_directory",
+        ":fast_build_javac",
         ":plugin_jar",
     ],
 )
@@ -150,6 +112,7 @@ plugin_deploy_zip(
     name = "ijwb_bazel_zip",
     srcs = [
         ":aspect_directory",
+        ":fast_build_javac",
         ":plugin_jar",
     ],
     zip_filename = "ijwb_bazel.zip",
@@ -167,6 +130,7 @@ intellij_unit_test_suite(
         "//common/experiments:unit_test_utils",
         "//intellij_platform_sdk:jsr305",
         "//intellij_platform_sdk:plugin_api_for_tests",
+        "//intellij_platform_sdk:test_libs",
         "@junit//jar",
     ],
 )
@@ -186,25 +150,7 @@ intellij_integration_test_suite(
         "//base:unit_test_utils",
         "//intellij_platform_sdk:jsr305",
         "//intellij_platform_sdk:plugin_api_for_tests",
-        "@junit//jar",
-    ],
-)
-
-intellij_integration_test_suite(
-    name = "typescript_integration_tests",
-    srcs = glob(["tests/typescript_integration_tests/**/*.java"]),
-    platform_prefix = "",
-    required_plugins = "com.google.idea.bazel.ijwb,JavaScript",
-    test_package_root = "com.google.idea.blaze.ijwb",
-    runtime_deps = [":ijwb_bazel"],
-    deps = [
-        ":ijwb_lib",
-        "//base",
-        "//base:integration_test_utils",
-        "//base:unit_test_utils",
-        "//intellij_platform_sdk:jsr305",
-        "//intellij_platform_sdk:plugin_api_for_tests",
-        "//third_party/javascript:javascript_for_tests",
+        "//intellij_platform_sdk:test_libs",
         "@junit//jar",
     ],
 )

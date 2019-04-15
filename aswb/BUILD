@@ -7,7 +7,7 @@ licenses(["notice"])  # Apache 2.0
 load(
     "//build_defs:build_defs.bzl",
     "intellij_plugin",
-    "merged_plugin_xml",
+    "intellij_plugin_library",
     "optional_plugin_xml",
     "plugin_deploy_zip",
     "repackaged_files",
@@ -25,58 +25,25 @@ load(
     "intellij_unit_test_suite",
 )
 
-merged_plugin_xml(
-    name = "merged_plugin_xml_common",
-    srcs = [
-        "src/META-INF/aswb.xml",
-        "//base:plugin_xml",
-        "//dart:plugin_xml",
-        "//java:plugin_xml",
-        "//kotlin:plugin_xml",
-        "//python:plugin_xml",
-        "//skylark:plugin_xml",
-    ] + select_for_plugin_api({
-        "android-studio-3.2": ["src/META-INF/aswb_3_2.xml"],
-        "android-studio-3.3": ["src/META-INF/aswb_3_3.xml"],
-        "android-studio-3.4": ["src/META-INF/aswb_3_3.xml"],
-    }),
-)
-
-optional_plugin_xml(
-    name = "optional_cpp_xml",
-    module = "com.intellij.modules.cidr.lang",
-    plugin_xml = "//cpp:plugin_xml",
-)
-
 optional_plugin_xml(
     name = "optional_ndk_xml",
     module = "com.android.tools.ndk",
     plugin_xml = "src/META-INF/ndk_contents.xml",
 )
 
-OPTIONAL_PLUGIN_XMLS = [
-    ":optional_cpp_xml",
-    ":optional_ndk_xml",
-    "//java:optional_java",
-    "//java:optional_coverage",
-    "//kotlin:optional_xml",
-    "//python:optional_xml",
-]
-
-merged_plugin_xml(
-    name = "merged_plugin_xml",
-    srcs = [
-        "src/META-INF/aswb_bazel.xml",
-        ":merged_plugin_xml_common",
-    ],
+intellij_plugin_library(
+    name = "plugin_library",
+    optional_plugin_xmls = [":optional_ndk_xml"],
+    plugin_xmls = ["src/META-INF/aswb.xml"],
+    deps = [":aswb_lib"],
 )
 
 stamped_plugin_xml(
     name = "stamped_plugin_xml",
     changelog_file = "//:changelog",
+    description_file = "src/META-INF/description.html",
     plugin_id = "com.google.idea.bazel.aswb",
     plugin_name = "Bazel",
-    plugin_xml = ":merged_plugin_xml",
     stamp_since_build = True,
     stamp_until_build = True,
     version = VERSION,
@@ -91,8 +58,11 @@ java_library(
         "//base",
         "//base:integration_test_utils",
         "//base:unit_test_utils",
+        "//cpp",
         "//intellij_platform_sdk:jsr305",
         "//intellij_platform_sdk:plugin_api_for_tests",
+        "//intellij_platform_sdk:test_libs",
+        "//java",
         "//testing:lib",
         "@junit//jar",
     ],
@@ -101,17 +71,20 @@ java_library(
 java_library(
     name = "aswb_lib",
     srcs = glob(["src/**/*.java"]) + select_for_plugin_api({
-        "android-studio-3.2": glob(["src_3_2/**/*.java"]),
-        "android-studio-3.3": glob(["src_3_3/**/*.java"]),
-        "android-studio-3.4": glob(["src_3_4/**/*.java"]),
+        "android-studio-3.3": glob([
+            "src_3_3/**/*.java",
+            "sdkcompat/as33/**/*.java",
+        ]),
+        "android-studio-3.4": glob([
+            "src_3_4/**/*.java",
+            "sdkcompat/as34/**/*.java",
+        ]),
+        "android-studio-3.5": glob([
+            "src_3_4/**/*.java",
+            "sdkcompat/as35/**/*.java",
+        ]),
     }),
     resources = glob(["resources/**/*"]),
-    runtime_deps = [
-        "//dart",
-        "//kotlin",
-        "//python",
-        "//skylark",
-    ],
     deps = [
         "//base",
         "//common/concurrency",
@@ -128,9 +101,9 @@ java_library(
 intellij_unit_test_suite(
     name = "unit_tests",
     srcs = glob(["tests/unittests/**/*.java"]) + select_for_plugin_api({
-        "android-studio-3.2": glob(["tests/unittests_3_2/**/*.java"]),
         "android-studio-3.3": glob(["tests/unittests_3_3/**/*.java"]),
         "android-studio-3.4": glob(["tests/unittests_3_4/**/*.java"]),
+        "android-studio-3.5": glob(["tests/unittests_3_4/**/*.java"]),
     }),
     test_package_root = "com.google.idea.blaze.android",
     deps = [
@@ -141,6 +114,7 @@ intellij_unit_test_suite(
         "//common/experiments:unit_test_utils",
         "//intellij_platform_sdk:jsr305",
         "//intellij_platform_sdk:plugin_api_for_tests",
+        "//intellij_platform_sdk:test_libs",
         "//java",
         "//proto:proto_deps",
         "@junit//jar",
@@ -161,16 +135,17 @@ intellij_integration_test_suite(
         ["tests/integrationtests/**/*.java"],
         exclude = ["tests/integrationtests/com/google/idea/blaze/android/plugin/NdkDependenciesTest.java"],
     ) + select_for_plugin_api({
-        "android-studio-3.2": glob(["tests/integrationtests_3_2/**/*.java"]),
         "android-studio-3.3": glob(["tests/integrationtests_3_3/**/*.java"]),
         "android-studio-3.4": glob(["tests/integrationtests_3_4/**/*.java"]),
+        "android-studio-3.5": glob(["tests/integrationtests_3_4/**/*.java"]),
     }),
     platform_prefix = "AndroidStudio",
     required_plugins = "com.google.idea.bazel.aswb",
     test_package_root = "com.google.idea.blaze.android",
     runtime_deps = [
         ":aswb_bazel",
-        "//intellij_platform_sdk:plugin_api_for_tests",
+        # Needed to work around one-version issue
+        "//intellij_platform_sdk:test_libs",
     ],
     deps = [
         ":aswb_lib",
@@ -183,6 +158,7 @@ intellij_integration_test_suite(
         "//cpp",
         "//intellij_platform_sdk:jsr305",
         "//intellij_platform_sdk:plugin_api_for_tests",
+        "//intellij_platform_sdk:test_libs",
         "//java",
         "//proto:proto_deps",
         "//sdkcompat",
@@ -207,6 +183,7 @@ intellij_integration_test_suite(
         "//base:integration_test_utils",
         "//base:unit_test_utils",
         "//intellij_platform_sdk:plugin_api_for_tests",
+        "//intellij_platform_sdk:test_libs",
         "//proto:proto_deps",
         "@junit//jar",
     ],
@@ -214,10 +191,17 @@ intellij_integration_test_suite(
 
 intellij_plugin(
     name = "aswb_bazel",
-    optional_plugin_xmls = OPTIONAL_PLUGIN_XMLS,
     plugin_xml = ":stamped_plugin_xml",
     deps = [
-        ":aswb_lib",
+        ":plugin_library",
+        "//base:plugin_library",
+        "//cpp:plugin_library",
+        "//dart:plugin_library",
+        "//java:plugin_library",
+        "//kotlin:plugin_library",
+        "//python:plugin_library",
+        "//skylark:plugin_library",
+        "//terminal:plugin_library",
     ],
 )
 
@@ -234,10 +218,17 @@ repackaged_files(
     strip_prefix = "/aspect",
 )
 
+repackaged_files(
+    name = "fast_build_javac",
+    srcs = ["//java:fast_build_javac"],
+    prefix = "aswb/lib",
+)
+
 intellij_plugin_debug_target(
     name = "aswb_bazel_dev",
     deps = [
         ":aspect_directory",
+        ":fast_build_javac",
         ":plugin_jar",
     ],
 )
@@ -246,6 +237,7 @@ plugin_deploy_zip(
     name = "aswb_bazel_zip",
     srcs = [
         ":aspect_directory",
+        ":fast_build_javac",
         ":plugin_jar",
     ],
     zip_filename = "aswb_bazel.zip",

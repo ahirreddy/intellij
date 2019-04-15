@@ -41,21 +41,20 @@ import com.google.idea.blaze.base.model.MockBlazeProjectDataManager;
 import com.google.idea.blaze.base.model.primitives.Kind;
 import com.google.idea.blaze.base.model.primitives.Label;
 import com.google.idea.blaze.base.model.primitives.WorkspaceRoot;
-import com.google.idea.blaze.base.projectview.ProjectViewManager;
-import com.google.idea.blaze.base.projectview.ProjectViewSet;
-import com.google.idea.blaze.base.scope.BlazeContext;
 import com.google.idea.blaze.base.settings.BlazeImportSettings;
 import com.google.idea.blaze.base.settings.BlazeImportSettingsManager;
 import com.google.idea.blaze.base.settings.BuildSystem;
 import com.google.idea.blaze.base.sync.data.BlazeProjectDataManager;
 import com.google.idea.blaze.base.sync.workspace.ArtifactLocationDecoder;
-import com.google.idea.blaze.base.sync.workspace.WorkspacePathResolver;
+import com.google.idea.blaze.base.sync.workspace.MockArtifactLocationDecoder;
+import com.google.idea.blaze.java.AndroidBlazeRules;
 import com.google.idea.common.experiments.ExperimentService;
 import com.google.idea.common.experiments.MockExperimentService;
 import com.intellij.mock.MockModule;
 import com.intellij.mock.MockVirtualFile;
 import com.intellij.openapi.editor.LazyRangeMarkerFactory;
 import com.intellij.openapi.editor.impl.LazyRangeMarkerFactoryImpl;
+import com.intellij.openapi.extensions.impl.ExtensionPointImpl;
 import com.intellij.openapi.fileEditor.FileEditorManager;
 import com.intellij.openapi.fileEditor.OpenFileDescriptor;
 import com.intellij.openapi.module.Module;
@@ -66,7 +65,6 @@ import com.intellij.psi.PsiElement;
 import com.intellij.psi.PsiFile;
 import java.io.File;
 import java.util.Map;
-import javax.annotation.Nullable;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -81,6 +79,11 @@ public class BlazeModuleSystemTest extends BlazeTestCase {
 
   @Override
   protected void initTest(Container applicationServices, Container projectServices) {
+    ExtensionPointImpl<Kind.Provider> kindProvider =
+        registerExtensionPoint(Kind.Provider.EP_NAME, Kind.Provider.class);
+    kindProvider.registerExtension(new AndroidBlazeRules());
+    applicationServices.register(Kind.ApplicationState.class, new Kind.ApplicationState());
+
     module = new MockModule(project, () -> {});
 
     // For the 'blaze.class.file.finder.name' experiment.
@@ -107,8 +110,7 @@ public class BlazeModuleSystemTest extends BlazeTestCase {
     assertThat(buildFile).isNotNull();
     when(psiFile.getVirtualFile()).thenReturn(buildFile);
 
-    service
-        .getModuleSystem(module)
+    new BlazeModuleSystem(module)
         .registerDependency(GoogleMavenArtifactId.APP_COMPAT_V7.getCoordinate("+"));
 
     ArgumentCaptor<OpenFileDescriptor> descriptorCaptor =
@@ -132,8 +134,7 @@ public class BlazeModuleSystemTest extends BlazeTestCase {
         VirtualFileSystemProvider.getInstance().getSystem().findFileByPath("/foo/BUILD");
     assertThat(buildFile).isNotNull();
 
-    service
-        .getModuleSystem(module)
+    new BlazeModuleSystem(module)
         .registerDependency(GoogleMavenArtifactId.APP_COMPAT_V7.getCoordinate("+"));
 
     verify(FileEditorManager.getInstance(project)).openFile(buildFile, true);
@@ -144,8 +145,7 @@ public class BlazeModuleSystemTest extends BlazeTestCase {
   public void testGetResolvedDependencyWithoutLocators() throws Exception {
     registerExtensionPoint(MavenArtifactLocator.EP_NAME, MavenArtifactLocator.class);
     assertThat(
-            service
-                .getModuleSystem(module)
+            new BlazeModuleSystem(module)
                 .getResolvedDependency(GoogleMavenArtifactId.APP_COMPAT_V7.getCoordinate("+")))
         .isNull();
   }
@@ -184,42 +184,21 @@ public class BlazeModuleSystemTest extends BlazeTestCase {
             .addTarget(
                 TargetIdeInfo.builder()
                     .setLabel(Label.create("//foo:bar"))
-                    .setKind(Kind.ANDROID_LIBRARY)
+                    .setKind(AndroidBlazeRules.RuleTypes.ANDROID_LIBRARY.getKind())
                     .setBuildFile(ArtifactLocation.builder().setRelativePath("foo/BUILD").build())
                     .build())
             .build();
-    ArtifactLocationDecoder decoder = (location) -> new File("/", location.getRelativePath());
+    ArtifactLocationDecoder decoder =
+        new MockArtifactLocationDecoder() {
+          @Override
+          public File decode(ArtifactLocation artifactLocation) {
+            return new File("/", artifactLocation.getRelativePath());
+          }
+        };
     return MockBlazeProjectDataBuilder.builder(workspaceRoot)
         .setTargetMap(targetMap)
         .setArtifactLocationDecoder(decoder)
         .build();
-  }
-
-  private static class MockProjectViewManager extends ProjectViewManager {
-    private ProjectViewSet viewSet;
-
-    public MockProjectViewManager() {
-      this.viewSet = ProjectViewSet.builder().build();
-    }
-
-    @Nullable
-    @Override
-    public ProjectViewSet getProjectViewSet() {
-      return viewSet;
-    }
-
-    @Nullable
-    @Override
-    public ProjectViewSet reloadProjectView(BlazeContext context) {
-      return viewSet;
-    }
-
-    @Nullable
-    @Override
-    public ProjectViewSet reloadProjectView(
-        BlazeContext context, WorkspacePathResolver workspacePathResolver) {
-      return viewSet;
-    }
   }
 
   private static class MockFileSystem extends TempFileSystem {

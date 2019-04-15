@@ -15,11 +15,11 @@
  */
 package com.google.idea.blaze.android.run.test;
 
-import com.android.tools.idea.fd.InstantRunUtils;
 import com.android.tools.idea.run.AndroidSessionInfo;
+import com.google.idea.blaze.android.run.AndroidSessionInfoCompat;
 import com.google.idea.blaze.android.run.BlazeAndroidRunConfigurationHandler;
-import com.google.idea.blaze.base.model.primitives.Kind;
 import com.google.idea.blaze.base.run.BlazeCommandRunConfiguration;
+import com.google.idea.blaze.java.AndroidBlazeRules;
 import com.intellij.execution.ExecutionException;
 import com.intellij.execution.configurations.RunConfigurationBase;
 import com.intellij.execution.configurations.RunProfile;
@@ -46,7 +46,8 @@ public class BlazeAndroidTestProgramRunner extends DefaultProgramRunner {
     BlazeCommandRunConfiguration configuration = (BlazeCommandRunConfiguration) profile;
     // Debugging android_instrumentation_test doesn't work yet.
     if (DefaultDebugExecutor.EXECUTOR_ID.equals(executorId)) {
-      return configuration.getTargetKind() != Kind.ANDROID_INSTRUMENTATION_TEST;
+      return configuration.getTargetKind()
+          != AndroidBlazeRules.RuleTypes.ANDROID_INSTRUMENTATION_TEST.getKind();
     }
     return DefaultRunExecutor.EXECUTOR_ID.equals(executorId);
   }
@@ -65,13 +66,7 @@ public class BlazeAndroidTestProgramRunner extends DefaultProgramRunner {
               ? ((RunConfigurationBase) runProfile).getUniqueID()
               : -1;
       AndroidSessionInfo sessionInfo =
-          new AndroidSessionInfo(
-              processHandler,
-              descriptor,
-              uniqueId,
-              env.getExecutor().getId(),
-              env.getExecutor().getActionName(),
-              InstantRunUtils.isInstantRunEnabled(env));
+          AndroidSessionInfoCompat.create(processHandler, descriptor, uniqueId, env);
       processHandler.putUserData(AndroidSessionInfo.KEY, sessionInfo);
     }
 

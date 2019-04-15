@@ -15,7 +15,7 @@
  */
 package com.google.idea.blaze.base.sync;
 
-import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.idea.blaze.base.model.primitives.TargetExpression;
 import java.util.Collection;
 import javax.annotation.concurrent.Immutable;
@@ -24,33 +24,6 @@ import javax.annotation.concurrent.Immutable;
 @Immutable
 public final class BlazeSyncParams {
 
-  /** The kind of sync. */
-  public enum SyncMode {
-    /** Happens on startup, restores in-memory state */
-    STARTUP,
-    /** Partial / working set sync */
-    PARTIAL,
-    /** This is the standard incremental sync */
-    INCREMENTAL,
-    /** Full sync, can invalidate/redo work that an incremental sync does not */
-    FULL,
-    /** A partial sync, without any blaze build (i.e. updates directories / in-memory state only) */
-    NO_BUILD;
-
-    public static boolean involvesBlazeBuild(SyncMode mode) {
-      switch (mode) {
-        case STARTUP:
-        case NO_BUILD:
-          return false;
-        case PARTIAL:
-        case INCREMENTAL:
-        case FULL:
-          return true;
-      }
-      throw new AssertionError("SyncMode not handled: " + mode);
-    }
-  }
-
   /** Builder for sync params */
   public static final class Builder {
     private String title;
@@ -58,7 +31,7 @@ public final class BlazeSyncParams {
     private boolean backgroundSync;
     private boolean addProjectViewTargets;
     private boolean addWorkingSet;
-    private ImmutableList.Builder<TargetExpression> targetExpressions = ImmutableList.builder();
+    private final ImmutableSet.Builder<TargetExpression> targetExpressions = ImmutableSet.builder();
 
     public static Builder copy(BlazeSyncParams params) {
       return new Builder(params.title, params.syncMode)
@@ -124,7 +97,7 @@ public final class BlazeSyncParams {
   public final boolean backgroundSync;
   public final boolean addProjectViewTargets;
   public final boolean addWorkingSet;
-  public final ImmutableList<TargetExpression> targetExpressions;
+  public final ImmutableSet<TargetExpression> targetExpressions;
 
   private BlazeSyncParams(
       String title,
@@ -132,13 +105,25 @@ public final class BlazeSyncParams {
       boolean backgroundSync,
       boolean addProjectViewTargets,
       boolean addWorkingSet,
-      ImmutableList<TargetExpression> targetExpressions) {
+      ImmutableSet<TargetExpression> targetExpressions) {
     this.title = title;
     this.syncMode = syncMode;
     this.backgroundSync = backgroundSync;
     this.addProjectViewTargets = addProjectViewTargets;
     this.addWorkingSet = addWorkingSet;
     this.targetExpressions = targetExpressions;
+  }
+
+  /** Combine {@link BlazeSyncParams} from multiple build phases. */
+  public static BlazeSyncParams combine(BlazeSyncParams first, BlazeSyncParams second) {
+    BlazeSyncParams base = first.syncMode.ordinal() > second.syncMode.ordinal() ? first : second;
+    return new Builder(base.title, base.syncMode)
+        .setBackgroundSync(first.backgroundSync && second.backgroundSync)
+        .addTargetExpressions(first.targetExpressions)
+        .addTargetExpressions(second.targetExpressions)
+        .addProjectViewTargets(first.addProjectViewTargets || second.addProjectViewTargets)
+        .addWorkingSet(first.addWorkingSet || second.addWorkingSet)
+        .build();
   }
 
   @Override

@@ -36,9 +36,10 @@ import com.google.idea.blaze.base.scope.output.IssueOutput;
 import com.google.idea.blaze.base.settings.BuildSystem;
 import com.google.idea.blaze.base.sync.projectview.ImportRoots;
 import com.google.idea.blaze.base.sync.workspace.ArtifactLocationDecoder;
+import com.google.idea.blaze.base.sync.workspace.MockArtifactLocationDecoder;
 import com.google.idea.blaze.java.sync.model.BlazeContentEntry;
 import com.google.idea.blaze.java.sync.model.BlazeSourceDirectory;
-import com.google.idea.blaze.scala.sync.source.ScalaJavaLikeLanguage;
+import com.google.idea.blaze.scala.ScalaJavaLikeLanguage;
 import com.intellij.openapi.extensions.ExtensionPoint;
 import java.io.File;
 import java.util.List;
@@ -56,8 +57,12 @@ public class ScalaSourceDirectoryCalculatorTest extends BlazeTestCase {
   private final WorkspaceRoot workspaceRoot = new WorkspaceRoot(new File("/root"));
 
   private final ArtifactLocationDecoder decoder =
-      (ArtifactLocationDecoder)
-          artifactLocation -> new File("/root", artifactLocation.getRelativePath());
+      new MockArtifactLocationDecoder() {
+        @Override
+        public File decode(ArtifactLocation artifactLocation) {
+          return new File("/root", artifactLocation.getRelativePath());
+        }
+      };
 
   @Override
   protected void initTest(Container applicationServices, Container projectServices) {
@@ -68,6 +73,8 @@ public class ScalaSourceDirectoryCalculatorTest extends BlazeTestCase {
     applicationServices.register(JavaSourcePackageReader.class, new JavaSourcePackageReader());
     applicationServices.register(PackageManifestReader.class, new PackageManifestReader());
     applicationServices.register(PrefetchService.class, new MockPrefetchService());
+
+
 
     ExtensionPoint<JavaLikeLanguage> javaLikeLanguages =
         registerExtensionPoint(JavaLikeLanguage.EP_NAME, JavaLikeLanguage.class);

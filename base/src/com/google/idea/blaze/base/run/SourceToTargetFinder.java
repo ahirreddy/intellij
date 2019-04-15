@@ -16,6 +16,7 @@
 package com.google.idea.blaze.base.run;
 
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.idea.blaze.base.dependencies.TargetInfo;
@@ -27,6 +28,7 @@ import java.io.File;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Future;
 
 /** Locates blaze rules which build a given source file. */
@@ -39,21 +41,41 @@ public interface SourceToTargetFinder {
    * Finds all rules of the given type 'reachable' from source file (i.e. with source included in
    * srcs, deps or runtime_deps).
    */
-  Future<Collection<TargetInfo>> targetsForSourceFile(
-      Project project, File sourceFile, Optional<RuleType> ruleType);
+  default Future<Collection<TargetInfo>> targetsForSourceFile(
+      Project project, File sourceFile, Optional<RuleType> ruleType) {
+    return targetsForSourceFiles(project, ImmutableSet.of(sourceFile), ruleType);
+  }
+
+  /**
+   * Finds all rules of the given type 'reachable' from the given source files (i.e. with one of the
+   * sources included in srcs, deps or runtime_deps).
+   */
+  Future<Collection<TargetInfo>> targetsForSourceFiles(
+      Project project, Set<File> sourceFiles, Optional<RuleType> ruleType);
 
   /**
    * Iterates through the all {@link SourceToTargetFinder}'s, returning a {@link Future}
-   * representing the first non-empty result.
+   * representing the first non-empty result, prioritizing any which are immediately available.
    *
    * <p>Future returns null if there was no non-empty result found.
    */
   static ListenableFuture<Collection<TargetInfo>> findTargetInfoFuture(
       Project project, File sourceFile, Optional<RuleType> ruleType) {
+    return findTargetInfoFuture(project, ImmutableSet.of(sourceFile), ruleType);
+  }
+
+  /**
+   * Iterates through the all {@link SourceToTargetFinder}'s, returning a {@link Future}
+   * representing the first non-empty result, prioritizing any which are immediately available.
+   *
+   * <p>Future returns null if there was no non-empty result found.
+   */
+  static ListenableFuture<Collection<TargetInfo>> findTargetInfoFuture(
+      Project project, Set<File> sourceFiles, Optional<RuleType> ruleType) {
     Iterable<Future<Collection<TargetInfo>>> futures =
         Iterables.transform(
             Arrays.asList(EP_NAME.getExtensions()),
-            f -> f.targetsForSourceFile(project, sourceFile, ruleType));
+            f -> f.targetsForSourceFiles(project, sourceFiles, ruleType));
     return FuturesUtil.getFirstFutureSatisfyingPredicate(futures, t -> t != null && !t.isEmpty());
   }
 
@@ -63,12 +85,9 @@ public interface SourceToTargetFinder {
    */
   static Collection<TargetInfo> findTargetsForSourceFile(
       Project project, File sourceFile, Optional<RuleType> ruleType) {
-    for (SourceToTargetFinder finder : EP_NAME.getExtensions()) {
-      Future<? extends Collection<TargetInfo>> future =
-          finder.targetsForSourceFile(project, sourceFile, ruleType);
-      if (!future.isDone()) {
-        continue;
-      }
+    ListenableFuture<Collection<TargetInfo>> future =
+        findTargetInfoFuture(project, sourceFile, ruleType);
+    if (future.isDone()) {
       Collection<TargetInfo> targets = FuturesUtil.getIgnoringErrors(future);
       if (targets != null && !targets.isEmpty()) {
         return targets;

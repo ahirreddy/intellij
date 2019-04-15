@@ -16,6 +16,7 @@
 package com.google.idea.blaze.python.run;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
@@ -26,6 +27,7 @@ import com.google.idea.blaze.base.command.BlazeInvocationContext;
 import com.google.idea.blaze.base.command.buildresult.BuildResultHelper;
 import com.google.idea.blaze.base.command.buildresult.BuildResultHelper.GetArtifactsException;
 import com.google.idea.blaze.base.command.buildresult.BuildResultHelperProvider;
+import com.google.idea.blaze.base.command.buildresult.LocalFileOutputArtifact;
 import com.google.idea.blaze.base.io.FileOperationProvider;
 import com.google.idea.blaze.base.model.BlazeProjectData;
 import com.google.idea.blaze.base.model.primitives.Label;
@@ -48,9 +50,7 @@ import com.intellij.execution.Executor;
 import com.intellij.execution.RunCanceledByUserException;
 import com.intellij.execution.configuration.EnvironmentVariablesData;
 import com.intellij.execution.configurations.GeneralCommandLine;
-import com.intellij.execution.configurations.RunProfile;
 import com.intellij.execution.configurations.RunProfileState;
-import com.intellij.execution.configurations.WrappingRunConfiguration;
 import com.intellij.execution.filters.Filter;
 import com.intellij.execution.filters.TextConsoleBuilder;
 import com.intellij.execution.filters.UrlFilter;
@@ -195,7 +195,7 @@ public class BlazePyRunConfigurationRunner implements BlazeCommandRunConfigurati
         protected ConsoleView createConsole() {
           PythonDebugLanguageConsoleView consoleView =
               new PythonDebugLanguageConsoleView(project, sdk);
-          for (Filter filter : getFilters(project)) {
+          for (Filter filter : getFilters()) {
             consoleView.addMessageFilter(filter);
           }
           return consoleView;
@@ -204,18 +204,22 @@ public class BlazePyRunConfigurationRunner implements BlazeCommandRunConfigurati
     }
 
     private static String getScriptParams(BlazeCommandRunConfigurationCommonState state) {
-      List<String> params = Lists.newArrayList(state.getExeFlagsState().getExpandedFlags());
+      List<String> params =
+          Lists.newArrayList(state.getExeFlagsState().getFlagsForExternalProcesses());
+      params.addAll(state.getTestArgs());
       String filterFlag = state.getTestFilterFlag();
       if (filterFlag != null) {
-        params.add(filterFlag.substring((BlazeFlags.TEST_FILTER + "=").length()));
+        String testFilterArg = filterFlag.substring((BlazeFlags.TEST_FILTER + "=").length());
+        // testFilterArg is a space-delimited list of filters
+        params.addAll(Splitter.on(" ").splitToList(testFilterArg));
       }
       return ParametersListUtil.join(params);
     }
   }
 
-  private static ImmutableList<Filter> getFilters(Project project) {
+  private static ImmutableList<Filter> getFilters() {
     return ImmutableList.<Filter>builder()
-        .add(new BlazeTargetFilter(project, true))
+        .add(new BlazeTargetFilter(true))
         .add(new UrlFilter())
         .build();
   }
@@ -223,17 +227,19 @@ public class BlazePyRunConfigurationRunner implements BlazeCommandRunConfigurati
   @Override
   public RunProfileState getRunProfileState(Executor executor, ExecutionEnvironment env) {
     if (!BlazeCommandRunConfigurationRunner.isDebugging(env)
-        || BlazeCommandRunConfigurationRunner.getBlazeCommand(env) == BlazeCommandName.BUILD) {
+        || BlazeCommandName.BUILD.equals(BlazeCommandRunConfigurationRunner.getBlazeCommand(env))) {
       return new BlazeCommandRunProfileState(env);
     }
-    BlazeCommandRunConfiguration configuration = getConfiguration(env);
+    BlazeCommandRunConfiguration configuration =
+        BlazeCommandRunConfigurationRunner.getConfiguration(env);
     env.putCopyableUserData(EXECUTABLE_KEY, new AtomicReference<>());
     return new BlazePyDummyRunProfileState(configuration);
   }
 
   @Override
   public boolean executeBeforeRunTask(ExecutionEnvironment env) {
-    if (!BlazeCommandRunConfigurationRunner.isDebugging(env)) {
+    if (!BlazeCommandRunConfigurationRunner.isDebugging(env)
+        || BlazeCommandName.BUILD.equals(BlazeCommandRunConfigurationRunner.getBlazeCommand(env))) {
       return true;
     }
     env.getCopyableUserData(EXECUTABLE_KEY).set(null);
@@ -248,14 +254,6 @@ public class BlazePyRunConfigurationRunner implements BlazeCommandRunConfigurati
           env.getProject(), env.getExecutor().getToolWindowId(), env.getRunProfile(), e);
     }
     return false;
-  }
-
-  private static BlazeCommandRunConfiguration getConfiguration(ExecutionEnvironment environment) {
-    RunProfile runProfile = environment.getRunProfile();
-    if (runProfile instanceof WrappingRunConfiguration) {
-      runProfile = ((WrappingRunConfiguration) runProfile).getPeer();
-    }
-    return (BlazeCommandRunConfiguration) runProfile;
   }
 
   /** Make a best-effort attempt to get the runfiles path. Returns null if it can't be found. */
@@ -278,7 +276,8 @@ public class BlazePyRunConfigurationRunner implements BlazeCommandRunConfigurati
    * @throws ExecutionException if the target cannot be debugged.
    */
   private static File getExecutableToDebug(ExecutionEnvironment env) throws ExecutionException {
-    BlazeCommandRunConfiguration configuration = getConfiguration(env);
+    BlazeCommandRunConfiguration configuration =
+        BlazeCommandRunConfigurationRunner.getConfiguration(env);
     Project project = configuration.getProject();
     BlazeProjectData blazeProjectData =
         BlazeProjectDataManager.getInstance(project).getBlazeProjectData();
@@ -292,11 +291,13 @@ public class BlazePyRunConfigurationRunner implements BlazeCommandRunConfigurati
       throw new WithBrowserHyperlinkExecutionException(validationError);
     }
 
+    SaveUtil.saveAllFiles();
     try (BuildResultHelper buildResultHelper =
         BuildResultHelperProvider.forFiles(project, file -> true)) {
 
       ListenableFuture<BuildResult> buildOperation =
-          BlazeBeforeRunCommandHelper.runBlazeBuild(
+          BlazeBeforeRunCommandHelper.runBlazeCommand(
+              BlazeCommandName.BUILD,
               configuration,
               buildResultHelper,
               BlazePyDebugHelper.getAllBlazeDebugFlags(
@@ -307,7 +308,6 @@ public class BlazePyRunConfigurationRunner implements BlazeCommandRunConfigurati
               "Building debug binary");
 
       try {
-        SaveUtil.saveAllFiles();
         BuildResult result = buildOperation.get();
         if (result.status != BuildResult.Status.SUCCESS) {
           throw new ExecutionException("Blaze failure building debug binary");
@@ -321,7 +321,9 @@ public class BlazePyRunConfigurationRunner implements BlazeCommandRunConfigurati
       List<File> candidateFiles;
       try {
         candidateFiles =
-            buildResultHelper.getBuildArtifactsForTarget((Label) configuration.getTarget()).stream()
+            LocalFileOutputArtifact.getLocalOutputFiles(
+                    buildResultHelper.getBuildArtifactsForTarget((Label) configuration.getTarget()))
+                .stream()
                 .filter(File::canExecute)
                 .collect(Collectors.toList());
       } catch (GetArtifactsException e) {

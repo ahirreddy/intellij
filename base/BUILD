@@ -1,5 +1,7 @@
 licenses(["notice"])  # Apache 2.0
 
+load("//build_defs:build_defs.bzl", "intellij_plugin_library")
+
 java_library(
     name = "base",
     srcs = glob(["src/**/*.java"]),
@@ -20,6 +22,13 @@ java_library(
         "//third_party/auto_value",
         "@error_prone_annotations//jar",
     ],
+)
+
+intellij_plugin_library(
+    name = "plugin_library",
+    plugin_xmls = ["src/META-INF/blaze-base.xml"],
+    visibility = ["//visibility:public"],
+    deps = [":base"],
 )
 
 java_library(
@@ -61,6 +70,22 @@ java_library(
         "//intellij_platform_sdk:jsr305",
         "//intellij_platform_sdk:plugin_api",
         "//proto:proto_deps",
+        "//third_party/auto_value",
+    ],
+)
+
+# self-contained sync listener API, exposed so other plugins can optionally depend on it
+java_library(
+    name = "sync_listener_api",
+    srcs = [
+        "src/com/google/idea/blaze/base/sync/SimpleSyncListener.java",
+        "src/com/google/idea/blaze/base/sync/SyncMode.java",
+        "src/com/google/idea/blaze/base/sync/SyncResult.java",
+    ],
+    neverlink = 1,
+    visibility = ["//visibility:public"],
+    deps = [
+        "//intellij_platform_sdk:plugin_api",
     ],
 )
 
@@ -100,6 +125,21 @@ java_library(
 
 # neverlink library exposed so other plugins can optionally depend on it
 java_library(
+    name = "workspace_language_checker_api",
+    srcs = [
+        "src/com/google/idea/blaze/base/model/primitives/LanguageClass.java",
+        "src/com/google/idea/blaze/base/sync/projectview/WorkspaceLanguageChecker.java",
+    ],
+    neverlink = 1,
+    deps = [
+        ":proto_wrapper",
+        "//intellij_platform_sdk:jsr305",
+        "//intellij_platform_sdk:plugin_api",
+    ],
+)
+
+# neverlink library exposed so other plugins can optionally depend on it
+java_library(
     name = "logging_api",
     srcs = [
         "src/com/google/idea/blaze/base/logging/EventLogger.java",
@@ -107,6 +147,20 @@ java_library(
     ],
     neverlink = 1,
     deps = [
+        "//intellij_platform_sdk:jsr305",
+        "//intellij_platform_sdk:plugin_api",
+    ],
+)
+
+# neverlink library exposed so other plugins can optionally depend on it
+java_library(
+    name = "blaze_user_settings_api",
+    srcs = [
+        "src/com/google/idea/blaze/base/settings/BlazeUserSettings.java",
+    ],
+    neverlink = 1,
+    deps = [
+        ":logging_api",
         "//intellij_platform_sdk:jsr305",
         "//intellij_platform_sdk:plugin_api",
     ],
@@ -132,10 +186,17 @@ java_library(
     ],
 )
 
-filegroup(
-    name = "plugin_xml",
-    srcs = ["src/META-INF/blaze-base.xml"],
-    visibility = ["//visibility:public"],
+# neverlink library exposed so other plugins can optionally depend on it
+java_library(
+    name = "buildifier_binary_provider_api",
+    srcs = [
+        "src/com/google/idea/blaze/base/buildmodifier/BuildifierBinaryProvider.java",
+    ],
+    neverlink = 1,
+    deps = [
+        "//intellij_platform_sdk:jsr305",
+        "//intellij_platform_sdk:plugin_api",
+    ],
 )
 
 java_library(
@@ -147,6 +208,7 @@ java_library(
         "//base",
         "//intellij_platform_sdk:jsr305",
         "//intellij_platform_sdk:plugin_api_for_tests",
+        "//intellij_platform_sdk:test_libs",
         "//sdkcompat",
         "@junit//jar",
     ],
@@ -162,6 +224,7 @@ java_library(
         "//base",
         "//intellij_platform_sdk:jsr305",
         "//intellij_platform_sdk:plugin_api_for_tests",
+        "//intellij_platform_sdk:test_libs",
         "//proto:proto_deps",
         "//testing:lib",
         "@junit//jar",
@@ -178,16 +241,13 @@ stamped_plugin_xml(
     name = "base_plugin_xml",
     plugin_id = "com.google.idea.blaze.base",
     plugin_name = "com.google.idea.blaze.base",
-    plugin_xml = "plugin_xml",
 )
 
 intellij_plugin(
     name = "base_integration_test_plugin",
     testonly = 1,
     plugin_xml = ":base_plugin_xml",
-    deps = [
-        ":base",
-    ],
+    deps = [":plugin_library"],
 )
 
 load(
@@ -207,6 +267,7 @@ intellij_unit_test_suite(
         "//common/experiments:unit_test_utils",
         "//intellij_platform_sdk:jsr305",
         "//intellij_platform_sdk:plugin_api_for_tests",
+        "//intellij_platform_sdk:test_libs",
         "//proto:proto_deps",
         "@junit//jar",
     ],
@@ -226,6 +287,7 @@ intellij_integration_test_suite(
         ":unit_test_utils",
         "//intellij_platform_sdk:jsr305",
         "//intellij_platform_sdk:plugin_api_for_tests",
+        "//intellij_platform_sdk:test_libs",
         "//proto:proto_deps",
         "//sdkcompat",
         "@junit//jar",

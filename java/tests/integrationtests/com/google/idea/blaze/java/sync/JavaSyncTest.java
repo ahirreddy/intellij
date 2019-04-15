@@ -30,8 +30,8 @@ import com.google.idea.blaze.base.model.primitives.WorkspaceType;
 import com.google.idea.blaze.base.settings.BuildBinaryType;
 import com.google.idea.blaze.base.sync.BlazeSyncIntegrationTestCase;
 import com.google.idea.blaze.base.sync.BlazeSyncParams;
-import com.google.idea.blaze.base.sync.BlazeSyncParams.SyncMode;
-import com.google.idea.blaze.base.sync.SyncListener.SyncResult;
+import com.google.idea.blaze.base.sync.SyncMode;
+import com.google.idea.blaze.base.sync.SyncResult;
 import com.google.idea.blaze.base.sync.data.BlazeProjectDataManager;
 import com.google.idea.blaze.java.sync.model.BlazeContentEntry;
 import com.google.idea.blaze.java.sync.model.BlazeJavaSyncData;
@@ -78,9 +78,7 @@ public class JavaSyncTest extends BlazeSyncIntegrationTestCase {
     setTargetMap(targetMap);
 
     BlazeSyncParams syncParams =
-        new BlazeSyncParams.Builder("Full Sync", BlazeSyncParams.SyncMode.FULL)
-            .addProjectViewTargets(true)
-            .build();
+        new BlazeSyncParams.Builder("Full Sync", SyncMode.FULL).addProjectViewTargets(true).build();
     runBlazeSync(syncParams);
 
     errorCollector.assertNoIssues();
@@ -193,15 +191,14 @@ public class JavaSyncTest extends BlazeSyncIntegrationTestCase {
     assertThat(syncStatsList).hasSize(2);
 
     SyncStats syncStats = syncStatsList.get(0);
-    assertThat(syncStats).isNotNull();
     assertThat(syncStats.workspaceType()).isEqualTo(WorkspaceType.JAVA);
-    assertThat(syncStats.blazeProjectTargets())
-        .containsExactly(TargetExpression.fromString("//java/com/google:lib"));
     assertThat(syncStats.syncMode()).isEqualTo(SyncMode.FULL);
     assertThat(syncStats.syncResult()).isEqualTo(SyncResult.SUCCESS);
     assertThat(syncStats.syncBinaryType()).isSameAs(BuildBinaryType.BAZEL);
-    assertThat(syncStats.startTimeInEpochTime()).isNotEqualTo(0);
     assertThat(syncStats.timedEvents()).isNotEmpty();
+    assertThat(syncStats.buildPhaseStats()).hasSize(1);
+    assertThat(syncStats.buildPhaseStats().get(0).targets())
+        .containsExactly(TargetExpression.fromString("//java/com/google:lib"));
 
     SyncStats secondSyncStats = syncStatsList.get(1);
     assertThat(secondSyncStats.syncMode()).isEqualTo(SyncMode.INCREMENTAL);
@@ -223,9 +220,7 @@ public class JavaSyncTest extends BlazeSyncIntegrationTestCase {
         workspace.createDirectory(new WorkspacePath("javatests/com/google"));
 
     BlazeSyncParams syncParams =
-        new BlazeSyncParams.Builder("Full Sync", BlazeSyncParams.SyncMode.FULL)
-            .addProjectViewTargets(true)
-            .build();
+        new BlazeSyncParams.Builder("Full Sync", SyncMode.FULL).addProjectViewTargets(true).build();
     runBlazeSync(syncParams);
 
     errorCollector.assertNoIssues();
@@ -262,9 +257,7 @@ public class JavaSyncTest extends BlazeSyncIntegrationTestCase {
             new WorkspacePath("java/com/google/moretests/AnotherExampleTest.java"));
 
     BlazeSyncParams syncParams =
-        new BlazeSyncParams.Builder("Full Sync", BlazeSyncParams.SyncMode.FULL)
-            .addProjectViewTargets(true)
-            .build();
+        new BlazeSyncParams.Builder("Full Sync", SyncMode.FULL).addProjectViewTargets(true).build();
     runBlazeSync(syncParams);
 
     errorCollector.assertNoIssues();
@@ -301,9 +294,7 @@ public class JavaSyncTest extends BlazeSyncIntegrationTestCase {
         workspace.createDirectory(new WorkspacePath("java/com/google/moretests"));
 
     BlazeSyncParams syncParams =
-        new BlazeSyncParams.Builder("Full Sync", BlazeSyncParams.SyncMode.FULL)
-            .addProjectViewTargets(true)
-            .build();
+        new BlazeSyncParams.Builder("Full Sync", SyncMode.FULL).addProjectViewTargets(true).build();
     runBlazeSync(syncParams);
 
     errorCollector.assertNoIssues();
@@ -344,9 +335,7 @@ public class JavaSyncTest extends BlazeSyncIntegrationTestCase {
         workspace.createDirectory(new WorkspacePath("javatests/com/google"));
 
     BlazeSyncParams syncParams =
-        new BlazeSyncParams.Builder("Full Sync", BlazeSyncParams.SyncMode.FULL)
-            .addProjectViewTargets(true)
-            .build();
+        new BlazeSyncParams.Builder("Full Sync", SyncMode.FULL).addProjectViewTargets(true).build();
     runBlazeSync(syncParams);
 
     errorCollector.assertNoIssues();
@@ -371,9 +360,7 @@ public class JavaSyncTest extends BlazeSyncIntegrationTestCase {
         workspace.createDirectory(new WorkspacePath("java/com/google/tests"));
 
     BlazeSyncParams syncParams =
-        new BlazeSyncParams.Builder("Full Sync", BlazeSyncParams.SyncMode.FULL)
-            .addProjectViewTargets(true)
-            .build();
+        new BlazeSyncParams.Builder("Full Sync", SyncMode.FULL).addProjectViewTargets(true).build();
     runBlazeSync(syncParams);
 
     errorCollector.assertNoIssues();

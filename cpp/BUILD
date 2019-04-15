@@ -3,7 +3,8 @@ licenses(["notice"])  # Apache 2.0
 load(
     "//build_defs:build_defs.bzl",
     "intellij_plugin",
-    "merged_plugin_xml",
+    "intellij_plugin_library",
+    "optional_plugin_xml",
     "stamped_plugin_xml",
 )
 load(
@@ -11,7 +12,7 @@ load(
     "intellij_integration_test_suite",
     "intellij_unit_test_suite",
 )
-load("//intellij_platform_sdk:build_defs.bzl", "select_for_ide")
+load("//intellij_platform_sdk:build_defs.bzl", "select_for_ide", "select_for_plugin_api")
 
 java_library(
     name = "cpp",
@@ -22,15 +23,27 @@ java_library(
         "//common/experiments",
         "//intellij_platform_sdk:jsr305",
         "//intellij_platform_sdk:plugin_api",
+        "//proto:proto_deps",
         "//sdkcompat",
         "//third_party/auto_value",
     ],
 )
 
-filegroup(
-    name = "plugin_xml",
-    srcs = ["src/META-INF/blaze-cpp.xml"],
-    visibility = ["//visibility:public"],
+optional_plugin_xml(
+    name = "optional_cidr",
+    module = "com.intellij.modules.cidr.lang",
+    plugin_xml = "src/META-INF/blaze-cpp.xml",
+)
+
+intellij_plugin_library(
+    name = "plugin_library",
+    optional_plugin_xmls = [":optional_cidr"],
+    visibility = [
+        "//:__subpackages__",
+        "//java/com/google/devtools/intellij/blaze/plugin:__subpackages__",
+        "//javatests/com/google/devtools/intellij/blaze/plugin:__subpackages__",
+    ],
+    deps = [":cpp"],
 )
 
 java_library(
@@ -45,15 +58,44 @@ java_library(
     ],
 )
 
+# exposed so plugins can optionally depend on it
+java_library(
+    name = "compiler_version_checker",
+    srcs = ["src/com/google/idea/blaze/cpp/CompilerVersionChecker.java"],
+    neverlink = 1,
+    deps = ["//intellij_platform_sdk:plugin_api"],
+)
+
+# exposed so plugins can optionally depend on it
+java_library(
+    name = "compiler_wrapper_provider",
+    srcs = ["src/com/google/idea/blaze/cpp/CompilerWrapperProvider.java"],
+    neverlink = 1,
+    deps = [
+        "//intellij_platform_sdk:jsr305",
+        "//intellij_platform_sdk:plugin_api",
+    ],
+)
+
 intellij_unit_test_suite(
     name = "unit_tests",
-    srcs = glob(["tests/unittests/**/*.java"]),
+    srcs = select_for_plugin_api({
+        "android-studio-3.5": glob(
+            ["tests/unittests/**/*.java"],
+            exclude = [
+                # b/126905301: does not work with truth 0.42
+                "tests/unittests/com/google/idea/blaze/cpp/BlazeResolveConfigurationEquivalenceTest.java",
+            ],
+        ),
+        "default": glob(["tests/unittests/**/*.java"]),
+    }),
     class_rules = select_for_ide(
         clion = ["com.google.idea.blaze.cpp.ClionUnitTestSystemPropertiesRule"],
         default = [],
     ),
     test_package_root = "com.google.idea.blaze.cpp",
-    runtime_deps = ["//intellij_platform_sdk:plugin_api_for_tests"],
+    # Needed to work around one-version issue
+    runtime_deps = ["//intellij_platform_sdk:test_libs"],
     deps = [
         ":cpp",
         ":unit_test_utils",
@@ -63,17 +105,9 @@ intellij_unit_test_suite(
         "//common/experiments:unit_test_utils",
         "//intellij_platform_sdk:jsr305",
         "//intellij_platform_sdk:plugin_api_for_tests",
+        "//intellij_platform_sdk:test_libs",
         "//sdkcompat",
         "@junit//jar",
-    ],
-)
-
-merged_plugin_xml(
-    name = "merged_plugin_xml",
-    srcs = [
-        "//base:plugin_xml",
-    ] + [
-        ":plugin_xml",
     ],
 )
 
@@ -81,7 +115,6 @@ stamped_plugin_xml(
     name = "cpp_plugin_xml",
     plugin_id = "com.google.idea.bazel.cpp",
     plugin_name = "com.google.idea.bazel.cpp",
-    plugin_xml = ":merged_plugin_xml",
 )
 
 intellij_plugin(
@@ -89,7 +122,8 @@ intellij_plugin(
     testonly = 1,
     plugin_xml = ":cpp_plugin_xml",
     deps = [
-        ":cpp",
+        ":plugin_library",
+        "//base:plugin_library",
     ],
 )
 
@@ -106,6 +140,7 @@ java_library(
         "//base:integration_test_utils",
         "//base:unit_test_utils",
         "//intellij_platform_sdk:plugin_api_for_tests",
+        "//intellij_platform_sdk:test_libs",
         "//sdkcompat",
         "//testing:lib",
         "@junit//jar",
@@ -134,6 +169,7 @@ intellij_integration_test_suite(
         "//base:unit_test_utils",
         "//intellij_platform_sdk:jsr305",
         "//intellij_platform_sdk:plugin_api_for_tests",
+        "//intellij_platform_sdk:test_libs",
         "//sdkcompat",
         "@junit//jar",
     ],

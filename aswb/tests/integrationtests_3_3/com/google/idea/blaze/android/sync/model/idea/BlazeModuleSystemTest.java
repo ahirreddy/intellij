@@ -16,7 +16,6 @@
 package com.google.idea.blaze.android.sync.model.idea;
 
 import static com.google.common.truth.Truth.assertThat;
-import static com.google.idea.blaze.android.sync.importer.BlazeImportInput.createLooksLikeAarLibrary;
 import static com.google.idea.blaze.android.sync.model.idea.BlazeImportFixture.source;
 import static com.google.idea.blaze.base.sync.data.BlazeDataStorage.WORKSPACE_MODULE_NAME;
 import static org.mockito.Mockito.mock;
@@ -65,14 +64,11 @@ public class BlazeModuleSystemTest extends BlazeIntegrationTestCase {
   public void doSetup() {
     module = testFixture.getModule();
     workspaceModule = mock(Module.class, Mockito.CALLS_REAL_METHODS);
-    Mockito.when(workspaceModule.getName()).thenReturn(WORKSPACE_MODULE_NAME);
-    Mockito.when(workspaceModule.getProject()).thenReturn(getProject());
+    Mockito.doReturn(WORKSPACE_MODULE_NAME).when(workspaceModule).getName();
+    Mockito.doReturn(getProject()).when(workspaceModule).getProject();
     context = new BlazeContext();
     MockExperimentService experimentService = new MockExperimentService();
     registerApplicationComponent(ExperimentService.class, experimentService);
-    // BlazeAndroidRunConfigurationCommonState.isNativeDebuggingEnabled() always
-    // returns false if this experiment is false.
-    experimentService.setExperiment(createLooksLikeAarLibrary, true);
 
     importFixture = new BlazeImportFixture(getProject(), fileSystem, workspaceRoot, context);
 

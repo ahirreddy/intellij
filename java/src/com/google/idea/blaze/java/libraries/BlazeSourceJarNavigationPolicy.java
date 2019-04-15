@@ -18,6 +18,7 @@ package com.google.idea.blaze.java.libraries;
 import com.google.idea.blaze.base.ideinfo.ArtifactLocation;
 import com.google.idea.blaze.base.io.VfsUtils;
 import com.google.idea.blaze.base.model.BlazeProjectData;
+import com.google.idea.blaze.base.sync.BlazeSyncModificationTracker;
 import com.google.idea.blaze.base.sync.data.BlazeProjectDataManager;
 import com.google.idea.blaze.base.sync.workspace.ArtifactLocationDecoder;
 import com.google.idea.blaze.java.sync.model.BlazeJarLibrary;
@@ -115,14 +116,8 @@ final class BlazeSourceJarNavigationPolicy extends ClsCustomNavigationPolicyEx {
 
   @Nullable
   private static VirtualFile getSourceJarRoot(
-      Project project,
-      ArtifactLocationDecoder artifactLocationDecoder,
-      ArtifactLocation sourceJar) {
-    File sourceJarFile =
-        JarCache.getInstance(project).getCachedSourceJar(artifactLocationDecoder, sourceJar);
-    if (sourceJarFile == null) {
-      sourceJarFile = artifactLocationDecoder.decode(sourceJar);
-    }
+      Project project, ArtifactLocationDecoder decoder, ArtifactLocation sourceJar) {
+    File sourceJarFile = JarCache.getInstance(project).getCachedSourceJar(decoder, sourceJar);
     if (sourceJar == null) {
       return null;
     }

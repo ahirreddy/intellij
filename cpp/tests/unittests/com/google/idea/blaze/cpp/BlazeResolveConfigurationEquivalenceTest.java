@@ -39,6 +39,7 @@ import com.google.idea.blaze.base.io.VirtualFileSystemProvider;
 import com.google.idea.blaze.base.model.MockBlazeProjectDataBuilder;
 import com.google.idea.blaze.base.model.primitives.ExecutionRootPath;
 import com.google.idea.blaze.base.model.primitives.Kind;
+import com.google.idea.blaze.base.model.primitives.Kind.Provider;
 import com.google.idea.blaze.base.model.primitives.TargetExpression;
 import com.google.idea.blaze.base.model.primitives.WorkspacePath;
 import com.google.idea.blaze.base.model.primitives.WorkspaceRoot;
@@ -56,6 +57,7 @@ import com.google.idea.blaze.base.settings.BlazeImportSettingsManager;
 import com.google.idea.common.experiments.ExperimentService;
 import com.google.idea.common.experiments.MockExperimentService;
 import com.intellij.mock.MockPsiManager;
+import com.intellij.openapi.extensions.impl.ExtensionPointImpl;
 import com.intellij.openapi.progress.ProgressManager;
 import com.intellij.openapi.progress.impl.ProgressManagerImpl;
 import com.intellij.openapi.vfs.LocalFileSystem;
@@ -63,9 +65,6 @@ import com.intellij.openapi.vfs.VirtualFile;
 import com.intellij.openapi.vfs.VirtualFileManager;
 import com.intellij.openapi.vfs.newvfs.impl.StubVirtualFile;
 import com.intellij.psi.PsiManager;
-import com.jetbrains.cidr.lang.OCLanguageKind;
-import com.jetbrains.cidr.lang.workspace.headerRoots.HeadersSearchRoot;
-import com.jetbrains.cidr.lang.workspace.headerRoots.IncludedHeadersRoot;
 import java.io.File;
 import java.util.Arrays;
 import java.util.List;
@@ -95,11 +94,17 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
         CompilerVersionChecker.class, new MockCompilerVersionChecker("1234"));
 
     applicationServices.register(ProgressManager.class, new ProgressManagerImpl());
+    applicationServices.register(CompilerWrapperProvider.class, new CompilerWrapperProviderImpl());
     applicationServices.register(VirtualFileManager.class, mock(VirtualFileManager.class));
     mockFileSystem = mock(LocalFileSystem.class);
     applicationServices.register(
         VirtualFileSystemProvider.class, mock(VirtualFileSystemProvider.class));
     when(VirtualFileSystemProvider.getInstance().getSystem()).thenReturn(mockFileSystem);
+
+    ExtensionPointImpl<Provider> ep =
+        registerExtensionPoint(Kind.Provider.EP_NAME, Kind.Provider.class);
+    ep.registerExtension(new CppBlazeRules());
+    applicationServices.register(Kind.ApplicationState.class, new Kind.ApplicationState());
 
     projectServices.register(PsiManager.class, new MockPsiManager(project));
     projectServices.register(BlazeImportSettingsManager.class, new BlazeImportSettingsManager());
@@ -131,21 +136,21 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
             .addTarget(
                 createCcTarget(
                     "//foo/bar:one",
-                    Kind.CC_BINARY,
+                    CppBlazeRules.RuleTypes.CC_BINARY.getKind(),
                     sources("foo/bar/one.cc"),
                     copts(),
                     includes()))
             .addTarget(
                 createCcTarget(
                     "//foo/bar:two",
-                    Kind.CC_BINARY,
+                    CppBlazeRules.RuleTypes.CC_BINARY.getKind(),
                     sources("foo/bar/two.cc"),
                     copts(),
                     includes()))
             .addTarget(
                 createCcTarget(
                     "//foo/bar:three",
-                    Kind.CC_BINARY,
+                    CppBlazeRules.RuleTypes.CC_BINARY.getKind(),
                     sources("foo/bar/three.cc"),
                     copts(),
                     includes()))
@@ -154,8 +159,7 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
     assertThat(configurations).hasSize(1);
     assertThat(get(configurations, "//foo/bar:one and 2 other target(s)")).isNotNull();
     for (BlazeResolveConfiguration configuration : configurations) {
-      assertThat(configuration.getProjectHeadersRootsInternal()).isEmpty();
-      assertThat(getHeaders(configuration, OCLanguageKind.CPP)).isEmpty();
+      assertThat(getHeaders(configuration)).isEmpty();
       assertThat(configuration.getTargetCopts()).isEmpty();
     }
   }
@@ -171,21 +175,21 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
             .addTarget(
                 createCcTarget(
                     "//foo/bar:one",
-                    Kind.CC_BINARY,
+                    CppBlazeRules.RuleTypes.CC_BINARY.getKind(),
                     sources("foo/bar/one.cc"),
                     copts("-DSAME=1"),
                     includes()))
             .addTarget(
                 createCcTarget(
                     "//foo/bar:two",
-                    Kind.CC_BINARY,
+                    CppBlazeRules.RuleTypes.CC_BINARY.getKind(),
                     sources("foo/bar/two.cc"),
                     copts("-DSAME=1"),
                     includes()))
             .addTarget(
                 createCcTarget(
                     "//foo/bar:three",
-                    Kind.CC_BINARY,
+                    CppBlazeRules.RuleTypes.CC_BINARY.getKind(),
                     sources("foo/bar/three.cc"),
                     copts("-DDIFFERENT=1"),
                     includes()))
@@ -197,8 +201,7 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
     assertThat(get(configurations, "//foo/bar:three").getTargetCopts())
         .isEqualTo(ImmutableList.of("-DDIFFERENT=1"));
     for (BlazeResolveConfiguration configuration : configurations) {
-      assertThat(configuration.getProjectHeadersRootsInternal()).isEmpty();
-      assertThat(getHeaders(configuration, OCLanguageKind.CPP)).isEmpty();
+      assertThat(getHeaders(configuration)).isEmpty();
     }
   }
 
@@ -213,37 +216,35 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
             .addTarget(
                 createCcTarget(
                     "//foo/bar:one",
-                    Kind.CC_BINARY,
+                    CppBlazeRules.RuleTypes.CC_BINARY.getKind(),
                     sources("foo/bar/one.cc"),
                     copts(),
                     includes("foo/same")))
             .addTarget(
                 createCcTarget(
                     "//foo/bar:two",
-                    Kind.CC_BINARY,
+                    CppBlazeRules.RuleTypes.CC_BINARY.getKind(),
                     sources("foo/bar/two.cc"),
                     copts(),
                     includes("foo/same")))
             .addTarget(
                 createCcTarget(
                     "//foo/bar:three",
-                    Kind.CC_BINARY,
+                    CppBlazeRules.RuleTypes.CC_BINARY.getKind(),
                     sources("foo/bar/three.cc"),
                     copts(),
                     includes("foo/different")))
             .build();
-    VirtualFile includeSame = createVirtualFile("/root/foo/same");
-    VirtualFile includeDifferent = createVirtualFile("/root/foo/different");
+    createVirtualFile("/root/foo/same");
+    createVirtualFile("/root/foo/different");
+
     List<BlazeResolveConfiguration> configurations = resolve(projectView, targetMap);
     assertThat(configurations).hasSize(2);
-    assertThat(
-            getHeaders(
-                get(configurations, "//foo/bar:one and 1 other target(s)"), OCLanguageKind.CPP))
-        .containsExactly(header(includeSame));
-    assertThat(getHeaders(get(configurations, "//foo/bar:three"), OCLanguageKind.CPP))
-        .containsExactly(header(includeDifferent));
+    assertThat(getHeaders(get(configurations, "//foo/bar:one and 1 other target(s)")))
+        .containsExactly(header("foo/same"));
+    assertThat(getHeaders(get(configurations, "//foo/bar:three")))
+        .containsExactly(header("foo/different"));
     for (BlazeResolveConfiguration configuration : configurations) {
-      assertThat(configuration.getProjectHeadersRootsInternal()).isEmpty();
       assertThat(configuration.getTargetCopts()).isEmpty();
     }
   }
@@ -256,28 +257,28 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
         .addTarget(
             createCcTarget(
                 "//foo/bar:a",
-                Kind.CC_BINARY,
+                CppBlazeRules.RuleTypes.CC_BINARY.getKind(),
                 sources("foo/bar/a.cc"),
                 copts("-DSAME=1"),
                 includes()))
         .addTarget(
             createCcTarget(
                 "//foo/bar:b",
-                Kind.CC_BINARY,
+                CppBlazeRules.RuleTypes.CC_BINARY.getKind(),
                 sources("foo/bar/b.cc"),
                 copts("-DSAME=1"),
                 includes()))
         .addTarget(
             createCcTarget(
                 "//foo/bar:c",
-                Kind.CC_BINARY,
+                CppBlazeRules.RuleTypes.CC_BINARY.getKind(),
                 sources("foo/bar/c.cc"),
                 copts("-DSAME=1"),
                 includes()))
         .addTarget(
             createCcTarget(
                 "//foo/bar:d",
-                Kind.CC_BINARY,
+                CppBlazeRules.RuleTypes.CC_BINARY.getKind(),
                 sources("foo/bar/d.cc"),
                 copts("-DDIFFERENT=1"),
                 includes()))
@@ -381,7 +382,7 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
         targetMapBuilder.addTarget(
             createCcTarget(
                 String.format("//foo/bar:%s", target),
-                Kind.CC_BINARY,
+                CppBlazeRules.RuleTypes.CC_BINARY.getKind(),
                 sources(String.format("foo/bar/%s.cc", target)),
                 copts("-DDIFFERENT=1"),
                 includes()));
@@ -389,7 +390,7 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
         targetMapBuilder.addTarget(
             createCcTarget(
                 String.format("//foo/bar:%s", target),
-                Kind.CC_BINARY,
+                CppBlazeRules.RuleTypes.CC_BINARY.getKind(),
                 sources(String.format("foo/bar/%s.cc", target)),
                 copts("-DSAME=1"),
                 includes()));
@@ -398,7 +399,7 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
     targetMapBuilder.addTarget(
         createCcTarget(
             "//foo/bar:d",
-            Kind.CC_BINARY,
+            CppBlazeRules.RuleTypes.CC_BINARY.getKind(),
             sources("foo/bar/d.cc"),
             copts("-DDIFFERENT=1"),
             includes()));
@@ -425,28 +426,28 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
             .addTarget(
                 createCcTarget(
                     "//foo/bar:a",
-                    Kind.CC_BINARY,
+                    CppBlazeRules.RuleTypes.CC_BINARY.getKind(),
                     sources("foo/bar/a.cc"),
                     copts("-DCHANGED=1"),
                     includes()))
             .addTarget(
                 createCcTarget(
                     "//foo/bar:b",
-                    Kind.CC_BINARY,
+                    CppBlazeRules.RuleTypes.CC_BINARY.getKind(),
                     sources("foo/bar/b.cc"),
                     copts("-DCHANGED=1"),
                     includes()))
             .addTarget(
                 createCcTarget(
                     "//foo/bar:c",
-                    Kind.CC_BINARY,
+                    CppBlazeRules.RuleTypes.CC_BINARY.getKind(),
                     sources("foo/bar/c.cc"),
                     copts("-DCHANGED=1"),
                     includes()))
             .addTarget(
                 createCcTarget(
                     "//foo/bar:d",
-                    Kind.CC_BINARY,
+                    CppBlazeRules.RuleTypes.CC_BINARY.getKind(),
                     sources("foo/bar/d.cc"),
                     copts("-DDIFFERENT=1"),
                     includes()))
@@ -476,28 +477,28 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
             .addTarget(
                 createCcTarget(
                     "//foo/bar:a",
-                    Kind.CC_BINARY,
+                    CppBlazeRules.RuleTypes.CC_BINARY.getKind(),
                     sources("foo/bar/a.cc"),
                     copts("-DSAME=1"),
                     includes()))
             .addTarget(
                 createCcTarget(
                     "//foo/bar:b",
-                    Kind.CC_BINARY,
+                    CppBlazeRules.RuleTypes.CC_BINARY.getKind(),
                     sources("foo/bar/b.cc"),
                     copts("-DSAME=1"),
                     includes()))
             .addTarget(
                 createCcTarget(
                     "//foo/bar:c",
-                    Kind.CC_BINARY,
+                    CppBlazeRules.RuleTypes.CC_BINARY.getKind(),
                     sources("foo/bar/c.cc"),
                     copts("-DSAME=1"),
                     includes()))
             .addTarget(
                 createCcTarget(
                     "//foo/bar:d",
-                    Kind.CC_BINARY,
+                    CppBlazeRules.RuleTypes.CC_BINARY.getKind(),
                     sources("foo/bar/d.cc"),
                     copts("-DSAME=1"),
                     includes()))
@@ -542,7 +543,7 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
   private static TargetIdeInfo.Builder createCcToolchain() {
     return TargetIdeInfo.builder()
         .setLabel("//:toolchain")
-        .setKind(Kind.CC_TOOLCHAIN)
+        .setKind(CppBlazeRules.RuleTypes.CC_TOOLCHAIN.getKind())
         .setCToolchainInfo(
             CToolchainIdeInfo.builder().setCppExecutable(new ExecutionRootPath("cc")));
   }
@@ -586,13 +587,13 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
       List<BlazeResolveConfiguration> configurations, String name) {
     List<BlazeResolveConfiguration> filteredConfigurations =
         configurations.stream()
-            .filter(c -> c.getDisplayName(false).equals(name))
+            .filter(c -> c.getDisplayName().equals(name))
             .collect(Collectors.toList());
     assertWithMessage(
             String.format(
                 "%s contains %s",
                 configurations.stream()
-                    .map(c -> c.getDisplayName(false))
+                    .map(BlazeResolveConfiguration::getDisplayName)
                     .collect(Collectors.toList()),
                 name))
         .that(filteredConfigurations)
@@ -600,16 +601,15 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
     return filteredConfigurations.get(0);
   }
 
-  private HeadersSearchRoot header(VirtualFile include) {
-    return new IncludedHeadersRoot(project, include, false, true);
+  private ExecutionRootPath header(String path) {
+    return new ExecutionRootPath(path);
   }
 
-  private static List<HeadersSearchRoot> getHeaders(
-      BlazeResolveConfiguration configuration, OCLanguageKind languageKind) {
-    return configuration.getLibraryHeadersRootsInternal(languageKind, null);
+  private static List<ExecutionRootPath> getHeaders(BlazeResolveConfiguration configuration) {
+    return configuration.getLibraryHeadersRootsInternal();
   }
 
-  private VirtualFile createVirtualFile(String path) {
+  private void createVirtualFile(String path) {
     VirtualFile stub =
         new StubVirtualFile() {
           @Override
@@ -618,7 +618,6 @@ public class BlazeResolveConfigurationEquivalenceTest extends BlazeTestCase {
           }
         };
     when(mockFileSystem.findFileByIoFile(new File(path))).thenReturn(stub);
-    return stub;
   }
 
   private static void assertReusedConfigs(

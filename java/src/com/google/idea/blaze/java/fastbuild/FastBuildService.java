@@ -17,8 +17,8 @@ package com.google.idea.blaze.java.fastbuild;
 
 import com.google.idea.blaze.base.model.primitives.Kind;
 import com.google.idea.blaze.base.model.primitives.Label;
+import com.google.idea.blaze.base.scope.BlazeContext;
 import com.google.idea.blaze.base.settings.BuildSystem;
-import com.google.idea.common.experiments.BoolExperiment;
 import com.intellij.openapi.project.Project;
 import java.util.List;
 import java.util.concurrent.Future;
@@ -35,8 +35,6 @@ import java.util.concurrent.Future;
  */
 public interface FastBuildService {
 
-  BoolExperiment enabled = new BoolExperiment("fast.build.service.enabled", true);
-
   static FastBuildService getInstance(Project project) {
     return project.getComponent(FastBuildService.class);
   }
@@ -49,7 +47,8 @@ public interface FastBuildService {
    * <p>Clients should make sure {@link #supportsFastBuilds} returns true for label's {@link Kind}
    * first.
    */
-  Future<FastBuildInfo> createBuild(Label label, String blazeBinaryPath, List<String> blazeFlags)
+  Future<FastBuildInfo> createBuild(
+      BlazeContext context, Label label, String blazeBinaryPath, List<String> blazeFlags)
       throws FastBuildException;
 
   void resetBuild(Label label);

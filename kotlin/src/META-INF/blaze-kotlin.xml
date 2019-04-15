@@ -16,5 +16,10 @@
 <idea-plugin>
   <extensions defaultExtensionNs="com.google.idea.blaze">
     <SyncPlugin implementation="com.google.idea.blaze.kotlin.sync.AlwaysPresentKotlinSyncPlugin"/>
+    <TargetKindProvider implementation="com.google.idea.blaze.kotlin.KotlinBlazeRules"/>
   </extensions>
+
+  <extensionPoints>
+    <extensionPoint qualifiedName="com.google.idea.blaze.KotlinPluginOptionsProvider" interface="com.google.idea.blaze.kotlin.sync.KotlinPluginOptionsProvider"/>
+  </extensionPoints>
 </idea-plugin>
